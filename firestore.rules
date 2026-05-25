@@ -1,0 +1,48 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Users — readable by anyone authenticated, writable only by owner
+    match /users/{uid} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null && request.auth.uid == uid;
+      allow update: if request.auth != null && request.auth.uid == uid;
+
+      // Friends subcollection — readable by owner, writable by owner
+      match /friends/{friendUid} {
+        allow read, write: if request.auth != null && request.auth.uid == uid;
+      }
+    }
+
+    // Friend requests — sender or recipient can read/write
+    match /friendRequests/{requestId} {
+      allow read: if request.auth != null &&
+        (resource.data.fromUid == request.auth.uid ||
+         resource.data.toUid == request.auth.uid);
+      allow create: if request.auth != null &&
+        request.resource.data.fromUid == request.auth.uid;
+      allow delete: if request.auth != null &&
+        (resource.data.fromUid == request.auth.uid ||
+         resource.data.toUid == request.auth.uid);
+    }
+
+    // Sessions — participants can read and update
+    match /sessions/{sessionId} {
+      allow read: if request.auth != null &&
+        (resource.data.hostId == request.auth.uid ||
+         resource.data.participantId == request.auth.uid ||
+         resource.data.status == 'waiting');
+      allow create: if request.auth != null &&
+        request.resource.data.hostId == request.auth.uid;
+      allow update: if request.auth != null &&
+        (resource.data.hostId == request.auth.uid ||
+         resource.data.participantId == request.auth.uid);
+    }
+
+    // Session history — owner only
+    match /sessionHistory/{entryId} {
+      allow read: if request.auth != null && resource.data.userId == request.auth.uid;
+      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
+    }
+  }
+}
