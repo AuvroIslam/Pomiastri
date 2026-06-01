@@ -190,11 +190,11 @@ const styles = StyleSheet.create({
   addCard: { gap: Spacing.sm },
   addRow: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     gap: Spacing.sm,
   },
   codeInput: { flex: 1 },
-  addBtn: { marginTop: 24 },
+  addBtn: {},
   requestCard: { gap: Spacing.sm, marginBottom: Spacing.sm },
   requestName: {
     fontSize: FontSize.md,

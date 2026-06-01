@@ -64,7 +64,9 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: FontSize.md,
     color: Colors.textPrimary,
-    paddingVertical: Spacing.sm,
+    minHeight: 48,
+    textAlignVertical: 'center',
+    paddingVertical: 0,
   },
   toggle: { paddingHorizontal: Spacing.xs },
   toggleText: {
