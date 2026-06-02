@@ -73,15 +73,11 @@ export default function SessionScreen() {
     advancePhase(session.id, nextPhase, nextDuration, newPhaseCount);
   }, [displaySeconds, session?.status, session?.timerState.phase, isHost]);
 
-  // ─── BackHandler — warn user ────────────────────────────────────────────────���─
+  // ─── BackHandler — warn user for any ongoing session state ───────────────
   useEffect(() => {
     if (!session || session.status === 'completed' || session.status === 'cancelled') return;
 
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
-      if (session.status === 'waiting') {
-        showLeaveAlert();
-        return true;
-      }
       showLeaveAlert();
       return true;
     });

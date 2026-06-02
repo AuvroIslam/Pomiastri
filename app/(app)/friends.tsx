@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   View,
   Text,
@@ -7,8 +7,9 @@ import {
   Alert,
   TouchableOpacity,
   ActivityIndicator,
+  BackHandler,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Clipboard from 'expo-clipboard';
 import { useAuth } from '@/hooks/useAuth';
@@ -36,6 +37,17 @@ export default function FriendsScreen() {
   const router = useRouter();
   const { user, profile } = useAuth();
   const { friends, requests, loading } = useFriends(profile?.uid);
+
+  useFocusEffect(
+    useCallback(() => {
+      const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+        router.replace('/(app)');
+        return true;
+      });
+
+      return () => sub.remove();
+    }, [router])
+  );
   const { invites, loading: invitesLoading } = useSessionInvites(profile?.uid);
   const [addCode, setAddCode] = useState('');
   const [inviteProcessing, setInviteProcessing] = useState<string | null>(null);

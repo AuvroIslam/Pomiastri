@@ -1,11 +1,13 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
   ActivityIndicator,
+  BackHandler,
 } from 'react-native';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '@/hooks/useAuth';
 import { getUserHistory } from '@/services/stats';
@@ -14,9 +16,21 @@ import { SessionHistoryEntry } from '@/types';
 import { Colors, Spacing, FontSize, FontWeight, Radius } from '@/constants/theme';
 
 export default function StatsScreen() {
+  const router = useRouter();
   const { profile } = useAuth();
   const [history, setHistory] = useState<SessionHistoryEntry[]>([]);
   const [loading, setLoading] = useState(true);
+
+  useFocusEffect(
+    useCallback(() => {
+      const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+        router.replace('/(app)');
+        return true;
+      });
+
+      return () => sub.remove();
+    }, [router])
+  );
 
   useEffect(() => {
     if (!profile) return;

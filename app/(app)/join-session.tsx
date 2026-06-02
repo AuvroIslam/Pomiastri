@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   View,
   Text,
@@ -8,8 +8,9 @@ import {
   Platform,
   TouchableOpacity,
   Alert,
+  BackHandler,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '@/hooks/useAuth';
 import { joinSessionByCode } from '@/services/sessions';
@@ -21,6 +22,17 @@ export default function JoinSessionScreen() {
   const router = useRouter();
   const { user, profile } = useAuth();
   const [joinCode, setJoinCode] = useState('');
+
+  useFocusEffect(
+    useCallback(() => {
+      const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+        router.replace('/(app)');
+        return true;
+      });
+
+      return () => sub.remove();
+    }, [router])
+  );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
