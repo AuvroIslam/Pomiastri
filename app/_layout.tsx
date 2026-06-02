@@ -1,40 +1,61 @@
 import React, { useEffect } from 'react';
-import { Stack, useRouter, useSegments, useRootNavigationState } from 'expo-router';
+import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import * as SplashScreen from 'expo-splash-screen';
-import { useAuth } from '@/hooks/useAuth';
+import { AuthProvider, useAuth } from '@/context/AuthContext';
+import { Colors } from '@/constants/theme';
 
 SplashScreen.preventAutoHideAsync();
 
-export default function RootLayout() {
+function RootNavigator() {
   const { user, loading } = useAuth();
-  const router = useRouter();
-  const segments = useSegments();
-  const navigationState = useRootNavigationState();
 
   useEffect(() => {
-    // Wait for both auth and navigation to be ready
-    if (loading) return;
-    if (!navigationState?.key) return;
-
-    SplashScreen.hideAsync();
-
-    const inAuthGroup = segments[0] === '(auth)';
-
-    if (!user && !inAuthGroup) {
-      router.replace('/(auth)/login');
-    } else if (user && inAuthGroup) {
-      router.replace('/(app)');
+    if (!loading) {
+      SplashScreen.hideAsync();
     }
-  }, [user, loading, segments, navigationState?.key]);
+  }, [loading]);
+
+  if (loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={Colors.primary} />
+      </View>
+    );
+  }
 
   return (
     <>
       <StatusBar style="dark" />
       <Stack screenOptions={{ headerShown: false, animation: 'fade' }}>
-        <Stack.Screen name="(auth)" />
-        <Stack.Screen name="(app)" />
+        {/* Declarative auth guard — only one group is reachable at a time.
+            expo-router automatically navigates to the available group when
+            the guard flips (e.g. on login/logout). */}
+        <Stack.Protected guard={!!user}>
+          <Stack.Screen name="(app)" />
+        </Stack.Protected>
+        <Stack.Protected guard={!user}>
+          <Stack.Screen name="(auth)" />
+        </Stack.Protected>
       </Stack>
     </>
   );
 }
+
+export default function RootLayout() {
+  return (
+    <AuthProvider>
+      <RootNavigator />
+    </AuthProvider>
+  );
+}
+
+const styles = StyleSheet.create({
+  loadingContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.background,
+  },
+});

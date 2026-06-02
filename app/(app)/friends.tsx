@@ -98,7 +98,7 @@ export default function FriendsScreen() {
               placeholder="Friend code"
               maxLength={6}
               autoCapitalize="characters"
-              style={styles.codeInput}
+              containerStyle={styles.codeInput}
               error={addError}
             />
             <Button

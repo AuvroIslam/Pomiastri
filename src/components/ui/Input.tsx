@@ -6,6 +6,8 @@ import {
   StyleSheet,
   TextInputProps,
   TouchableOpacity,
+  ViewStyle,
+  StyleProp,
 } from 'react-native';
 import { Colors, Spacing, Radius, FontSize, FontWeight } from '@/constants/theme';
 
@@ -13,13 +15,22 @@ interface InputProps extends TextInputProps {
   label?: string;
   error?: string;
   secureToggle?: boolean;
+  /** Style applied to the outer wrapper (e.g. flex layout). */
+  containerStyle?: StyleProp<ViewStyle>;
 }
 
-export function Input({ label, error, secureToggle, style, ...props }: InputProps) {
+export function Input({
+  label,
+  error,
+  secureToggle,
+  style,
+  containerStyle,
+  ...props
+}: InputProps) {
   const [showPassword, setShowPassword] = useState(false);
 
   return (
-    <View style={[styles.wrapper, style]}> 
+    <View style={[styles.wrapper, containerStyle]}>
       {label ? <Text style={styles.label}>{label}</Text> : null}
       <View style={[styles.inputRow, error ? styles.inputError : null]}>
         <TextInput

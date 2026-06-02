@@ -30,8 +30,8 @@ export default function LoginScreen() {
     setLoading(true);
     try {
       await loginUser(email.trim(), password);
+      // AuthContext + Stack.Protected handle navigation automatically
     } catch (e: any) {
-      console.error('[login] loginUser failed:', e.code, e.message);
       setError(friendlyAuthError(e.code));
     } finally {
       setLoading(false);
