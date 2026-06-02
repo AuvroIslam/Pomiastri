@@ -30,9 +30,14 @@ export default function CreateSessionScreen() {
     setLoading(true);
     try {
       const sessionId = await createSession(user.uid, profile.displayName, settings);
-      router.replace(`/(app)/session/${sessionId}`);
+      if (sessionId) {
+        router.replace(`/(app)/session/${sessionId}`);
+      } else {
+        throw new Error('Session creation failed.');
+      }
     } catch {
       Alert.alert('Error', 'Could not create session. Please try again.');
+    } finally {
       setLoading(false);
     }
   }
