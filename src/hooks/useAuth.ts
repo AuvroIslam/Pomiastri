@@ -20,8 +20,14 @@ export function useAuth(): AuthState {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
-        const profile = await getUserProfile(user.uid);
-        setState({ user, profile, loading: false });
+        try {
+          const profile = await getUserProfile(user.uid);
+          setState({ user, profile, loading: false });
+        } catch {
+          // Profile fetch failed (network/Firestore error) but user IS authenticated
+          // Still mark as logged in so the router doesn't bounce to login
+          setState({ user, profile: null, loading: false });
+        }
       } else {
         setState({ user: null, profile: null, loading: false });
       }
