@@ -8,6 +8,7 @@ import {
   where,
   getDocs,
   onSnapshot,
+  orderBy,
   serverTimestamp,
   Timestamp,
   Unsubscribe,
@@ -15,7 +16,7 @@ import {
   addDoc,
 } from 'firebase/firestore';
 import { db } from './firebase';
-import { Session, SessionSettings, TimerState, PomodoroPhase } from '@/types';
+import { Session, SessionInvite, SessionSettings, TimerState, PomodoroPhase } from '@/types';
 import { DEFAULT_SESSION_SETTINGS } from '@/constants/pomodoro';
 import { generateJoinCode } from '@/utils/code';
 
@@ -25,7 +26,7 @@ export async function createSession(
   hostId: string,
   hostDisplayName: string,
   settings: SessionSettings = DEFAULT_SESSION_SETTINGS
-): Promise<string> {
+): Promise<{ sessionId: string; joinCode: string }> {
   const joinCode = generateJoinCode();
   const sessionRef = doc(collection(db, 'sessions'));
 
@@ -56,7 +57,7 @@ export async function createSession(
   };
 
   await setDoc(sessionRef, session);
-  return sessionRef.id;
+  return { sessionId: sessionRef.id, joinCode: session.joinCode };
 }
 
 export async function joinSessionByCode(
@@ -93,6 +94,51 @@ export async function joinSessionByCode(
   });
 
   return { success: true, sessionId: sessionDoc.id };
+}
+
+export async function sendSessionInvite(
+  sessionId: string,
+  joinCode: string,
+  fromUid: string,
+  fromDisplayName: string,
+  toUid: string
+): Promise<void> {
+  const inviteRef = doc(collection(db, 'sessionInvites'));
+  await setDoc(inviteRef, {
+    sessionId,
+    joinCode,
+    fromUid,
+    fromDisplayName,
+    toUid,
+    status: 'pending',
+    createdAt: serverTimestamp(),
+  });
+}
+
+export function subscribeToSessionInvites(
+  toUid: string,
+  callback: (invites: SessionInvite[]) => void
+) {
+  const q = query(
+    collection(db, 'sessionInvites'),
+    where('toUid', '==', toUid),
+    where('status', '==', 'pending'),
+    orderBy('createdAt', 'desc')
+  );
+
+  return onSnapshot(q, (snap) => {
+    const invites = snap.docs.map((doc) => ({ id: doc.id, ...doc.data() } as SessionInvite));
+    callback(invites);
+  });
+}
+
+export async function respondToSessionInvite(
+  inviteId: string,
+  status: 'accepted' | 'declined'
+): Promise<void> {
+  await updateDoc(doc(db, 'sessionInvites', inviteId), {
+    status,
+  });
 }
 
 export async function getSession(sessionId: string): Promise<Session | null> {

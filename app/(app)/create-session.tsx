@@ -9,18 +9,24 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import * as Clipboard from 'expo-clipboard';
 import { useAuth } from '@/hooks/useAuth';
-import { createSession } from '@/services/sessions';
+import { useFriends } from '@/hooks/useFriends';
+import { createSession, sendSessionInvite } from '@/services/sessions';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
+import { FriendItem } from '@/components/friends/FriendItem';
 import { Colors, Spacing, FontSize, FontWeight, Radius } from '@/constants/theme';
 import { DEFAULT_SESSION_SETTINGS } from '@/constants/pomodoro';
-import { SessionSettings } from '@/types';
+import { SessionSettings, Friend } from '@/types';
 
 export default function CreateSessionScreen() {
   const router = useRouter();
   const { user, profile } = useAuth();
   const [loading, setLoading] = useState(false);
+  const [createdSessionId, setCreatedSessionId] = useState<string | null>(null);
+  const [joinCode, setJoinCode] = useState<string | null>(null);
+  const { friends, loading: friendsLoading } = useFriends(profile?.uid);
 
   // Simple settings — MVP uses defaults
   const settings: SessionSettings = DEFAULT_SESSION_SETTINGS;
@@ -29,16 +35,40 @@ export default function CreateSessionScreen() {
     if (!user || !profile) return;
     setLoading(true);
     try {
-      const sessionId = await createSession(user.uid, profile.displayName, settings);
-      if (sessionId) {
-        router.replace(`/(app)/session/${sessionId}`);
-      } else {
-        throw new Error('Session creation failed.');
-      }
+      const result = await createSession(user.uid, profile.displayName, settings);
+      setCreatedSessionId(result.sessionId);
+      setJoinCode(result.joinCode);
     } catch {
       Alert.alert('Error', 'Could not create session. Please try again.');
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleCopyJoinCode() {
+    if (!joinCode) return;
+    await Clipboard.setStringAsync(joinCode);
+    Alert.alert('Copied', 'Session join code copied to clipboard.');
+  }
+
+  const [inviteLoading, setInviteLoading] = useState<string | null>(null);
+
+  async function handleInvite(friend: Friend) {
+    if (!joinCode || !createdSessionId || !user) return;
+    setInviteLoading(friend.uid);
+    try {
+      await sendSessionInvite(
+        createdSessionId,
+        joinCode,
+        user.uid,
+        profile?.displayName ?? 'Someone',
+        friend.uid
+      );
+      Alert.alert('Invite sent', `${friend.displayName} has been invited.`);
+    } catch {
+      Alert.alert('Error', 'Could not send invite. Please try again.');
+    } finally {
+      setInviteLoading(null);
     }
   }
 
@@ -76,19 +106,67 @@ export default function CreateSessionScreen() {
           />
         </Card>
 
-        <Card style={styles.infoCard}>
-          <Text style={styles.infoText}>
-            After creating, you'll get a join code. Share it with your study partner.
-            The session starts when they join and you press Start.
-          </Text>
-        </Card>
+        {createdSessionId ? (
+          <>
+            <Card style={styles.joinCodeCard}>
+              <Text style={styles.settingsTitle}>Session Created</Text>
+              <Text style={styles.joinCodeLabel}>Join code</Text>
+              <Text style={styles.joinCodeValue}>{joinCode}</Text>
+              <Button
+                label="Copy Code"
+                onPress={handleCopyJoinCode}
+                size="md"
+                style={styles.copyBtn}
+              />
+            </Card>
 
-        <Button
-          label="Create Session"
-          onPress={handleCreate}
-          loading={loading}
-          size="lg"
-        />
+            <Card style={styles.infoCard}>
+              <Text style={styles.infoText}>
+                Your session is ready. Invite a friend below or copy the code and share it directly. The session will wait for someone to join.
+              </Text>
+            </Card>
+
+            <Card style={styles.friendCard}>
+              <Text style={styles.settingsTitle}>Invite Friends</Text>
+              {friendsLoading ? (
+                <Text style={styles.friendText}>Loading friends…</Text>
+              ) : friends.length === 0 ? (
+                <Text style={styles.friendText}>
+                  You have no friends yet. Add friends first to invite them here.
+                </Text>
+              ) : (
+                friends.map((friend, index) => (
+                  <React.Fragment key={friend.uid}>
+                    {index > 0 && <View style={styles.friendDivider} />}
+                    <FriendItem friend={friend} onInvite={handleInvite} />
+                  </React.Fragment>
+                ))
+              )}
+            </Card>
+
+            <Button
+              label="Open Session"
+              onPress={() => router.replace(`/(app)/session/${createdSessionId}`)}
+              size="lg"
+            />
+          </>
+        ) : (
+          <>
+            <Card style={styles.infoCard}>
+              <Text style={styles.infoText}>
+                After creating, you'll get a join code. Share it with your study partner.
+                The session starts when they join and you press Start.
+              </Text>
+            </Card>
+
+            <Button
+              label="Create Session"
+              onPress={handleCreate}
+              loading={loading}
+              size="lg"
+            />
+          </>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -164,4 +242,30 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
     lineHeight: 20,
   },
+  joinCodeCard: {
+    gap: Spacing.sm,
+    backgroundColor: Colors.surfaceElevated,
+    borderColor: Colors.border,
+  },
+  joinCodeLabel: {
+    fontSize: FontSize.xs,
+    color: Colors.textSecondary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: Spacing.xs,
+  },
+  joinCodeValue: {
+    fontSize: FontSize.xxxl,
+    fontWeight: FontWeight.bold,
+    color: Colors.textPrimary,
+    letterSpacing: 8,
+  },
+  copyBtn: { width: '100%' },
+  friendCard: { gap: Spacing.sm },
+  friendText: {
+    fontSize: FontSize.sm,
+    color: Colors.textSecondary,
+    lineHeight: 20,
+  },
+  friendDivider: { height: 1, backgroundColor: Colors.divider },
 });

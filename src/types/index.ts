@@ -41,6 +41,17 @@ export interface Friend {
   addedAt: Timestamp;
 }
 
+export interface SessionInvite {
+  id: string;
+  sessionId: string;
+  joinCode: string;
+  fromUid: string;
+  fromDisplayName: string;
+  toUid: string;
+  status: 'pending' | 'accepted' | 'declined';
+  createdAt: Timestamp;
+}
+
 // ─── Session ─────────────────────────────────────────────────────────────────
 
 export type SessionStatus =

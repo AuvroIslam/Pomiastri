@@ -8,15 +8,22 @@ import {
   TouchableOpacity,
   ActivityIndicator,
 } from 'react-native';
+import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import * as Clipboard from 'expo-clipboard';
 import { useAuth } from '@/hooks/useAuth';
 import { useFriends } from '@/hooks/useFriends';
+import { useSessionInvites } from '@/hooks/useSessionInvites';
 import {
   sendFriendRequest,
   acceptFriendRequest,
   rejectFriendRequest,
   removeFriend,
 } from '@/services/friends';
+import {
+  respondToSessionInvite,
+  joinSessionByCode,
+} from '@/services/sessions';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Card } from '@/components/ui/Card';
@@ -26,9 +33,12 @@ import { Friend } from '@/types';
 import { normalizeFriendCode } from '@/utils/code';
 
 export default function FriendsScreen() {
-  const { profile } = useAuth();
+  const router = useRouter();
+  const { user, profile } = useAuth();
   const { friends, requests, loading } = useFriends(profile?.uid);
+  const { invites, loading: invitesLoading } = useSessionInvites(profile?.uid);
   const [addCode, setAddCode] = useState('');
+  const [inviteProcessing, setInviteProcessing] = useState<string | null>(null);
   const [addLoading, setAddLoading] = useState(false);
   const [addError, setAddError] = useState('');
 
@@ -62,6 +72,53 @@ export default function FriendsScreen() {
     } catch {
       Alert.alert('Error', 'Could not accept request.');
     }
+  }
+
+  async function handleInviteResponse(
+    inviteId: string,
+    joinCode: string,
+    status: 'accepted' | 'declined'
+  ) {
+    setInviteProcessing(inviteId);
+    try {
+      if (status === 'accepted') {
+        if (!user || !profile) {
+          Alert.alert('Error', 'Unable to join session. Please sign in again.');
+          return;
+        }
+
+        const result = await joinSessionByCode(
+          joinCode,
+          user.uid,
+          profile.displayName ?? 'Friend'
+        );
+
+        if (!result.success || !result.sessionId) {
+          await respondToSessionInvite(inviteId, 'declined');
+          Alert.alert(
+            'Invite unavailable',
+            result.error ||
+              'This session was already ended by the creator.'
+          );
+          return;
+        }
+
+        await respondToSessionInvite(inviteId, 'accepted');
+        router.replace(`/(app)/session/${result.sessionId}`);
+        return;
+      }
+
+      await respondToSessionInvite(inviteId, status);
+    } catch {
+      Alert.alert('Error', `Could not ${status} invite.`);
+    } finally {
+      setInviteProcessing(null);
+    }
+  }
+
+  function handleCopyInvite(joinCode: string) {
+    Clipboard.setStringAsync(joinCode);
+    Alert.alert('Copied', 'Session join code copied to clipboard.');
   }
 
   async function handleRemove(friend: Friend) {
@@ -110,6 +167,43 @@ export default function FriendsScreen() {
             />
           </View>
         </Card>
+
+        {/* Incoming Session Invites */}
+        <View>
+          <Text style={styles.sectionTitle}>Session Invites</Text>
+          {invitesLoading ? (
+            <ActivityIndicator color={Colors.primary} />
+          ) : invites.length === 0 ? (
+            <Text style={styles.empty}>No session invites yet.</Text>
+          ) : (
+            invites.map((invite) => (
+              <Card key={invite.id} style={styles.requestCard}>
+                <Text style={styles.requestName}>{invite.fromDisplayName}</Text>
+                <Text style={styles.requestCode}>{invite.joinCode}</Text>
+                <View style={styles.requestActions}>
+                  <Button
+                    label="Copy Code"
+                    onPress={() => handleCopyInvite(invite.joinCode)}
+                    size="sm"
+                    style={styles.acceptBtn}
+                  />
+                  <Button
+                    label="Accept"
+                    onPress={() => handleInviteResponse(invite.id, invite.joinCode, 'accepted')}
+                    loading={inviteProcessing === invite.id}
+                    size="sm"
+                  />
+                  <Button
+                    label="Decline"
+                    onPress={() => handleInviteResponse(invite.id, invite.joinCode, 'declined')}
+                    variant="ghost"
+                    size="sm"
+                  />
+                </View>
+              </Card>
+            ))
+          )}
+        </View>
 
         {/* Incoming Requests */}
         {requests.length > 0 && (
