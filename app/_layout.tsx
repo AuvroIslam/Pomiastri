@@ -1,9 +1,8 @@
 import React, { useEffect } from 'react';
-import { Stack, useRouter, useSegments } from 'expo-router';
+import { Stack, useRouter, useSegments, useRootNavigationState } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
 import { useAuth } from '@/hooks/useAuth';
-import { Colors } from '@/constants/theme';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -11,9 +10,13 @@ export default function RootLayout() {
   const { user, loading } = useAuth();
   const router = useRouter();
   const segments = useSegments();
+  const navigationState = useRootNavigationState();
 
   useEffect(() => {
+    // Wait for both auth and navigation to be ready
     if (loading) return;
+    if (!navigationState?.key) return;
+
     SplashScreen.hideAsync();
 
     const inAuthGroup = segments[0] === '(auth)';
@@ -23,7 +26,7 @@ export default function RootLayout() {
     } else if (user && inAuthGroup) {
       router.replace('/(app)');
     }
-  }, [user, loading]);
+  }, [user, loading, segments, navigationState?.key]);
 
   return (
     <>
