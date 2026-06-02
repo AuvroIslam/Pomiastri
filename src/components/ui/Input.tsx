@@ -19,7 +19,7 @@ export function Input({ label, error, secureToggle, style, ...props }: InputProp
   const [showPassword, setShowPassword] = useState(false);
 
   return (
-    <View style={styles.wrapper}>
+    <View style={[styles.wrapper, style]}> 
       {label ? <Text style={styles.label}>{label}</Text> : null}
       <View style={[styles.inputRow, error ? styles.inputError : null]}>
         <TextInput
