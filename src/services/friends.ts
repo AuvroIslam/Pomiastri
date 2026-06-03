@@ -14,7 +14,9 @@ import {
 } from 'firebase/firestore';
 import { db } from './firebase';
 import { Friend, FriendRequest, UserProfile } from '@/types';
+import { DEFAULT_DRIVER } from '@/constants/drivers';
 import { getUserByFriendCode, getUserProfile } from './users';
+import { sendPush } from './notifications';
 
 // ─── Friend Requests ──────────────────────────────────────────────────────────
 
@@ -31,15 +33,11 @@ export async function sendFriendRequest(
     return { success: false, error: 'No user found with that friend code.' };
   }
 
-  // Check already friends
-  const friendDoc = await getDoc(
-    doc(db, 'users', fromUser.uid, 'friends', target.uid)
-  );
+  const friendDoc = await getDoc(doc(db, 'users', fromUser.uid, 'friends', target.uid));
   if (friendDoc.exists()) {
     return { success: false, error: 'You are already friends.' };
   }
 
-  // Check pending request
   const pendingQuery = query(
     collection(db, 'friendRequests'),
     where('fromUid', '==', fromUser.uid),
@@ -56,11 +54,15 @@ export async function sendFriendRequest(
     fromUid: fromUser.uid,
     fromDisplayName: fromUser.displayName,
     fromFriendCode: fromUser.friendCode,
+    fromAvatarId: fromUser.avatarId ?? DEFAULT_DRIVER,
     toFriendCode: toFriendCode.toUpperCase(),
     toUid: target.uid,
     status: 'pending',
     createdAt: serverTimestamp(),
   });
+
+  // Notify the recipient
+  sendPush(target.uid, 'friend_request', fromUser.displayName);
 
   return { success: true };
 }
@@ -79,13 +81,13 @@ export async function acceptFriendRequest(
 
   if (!fromProfile || !toProfile) throw new Error('User not found');
 
-  // Add each user to the other's friends subcollection
   const now = serverTimestamp();
 
   await setDoc(doc(db, 'users', request.fromUid, 'friends', currentUid), {
     uid: currentUid,
     displayName: toProfile.displayName,
     friendCode: toProfile.friendCode,
+    avatarId: toProfile.avatarId ?? DEFAULT_DRIVER,
     addedAt: now,
   });
 
@@ -93,6 +95,7 @@ export async function acceptFriendRequest(
     uid: request.fromUid,
     displayName: fromProfile.displayName,
     friendCode: fromProfile.friendCode,
+    avatarId: fromProfile.avatarId ?? DEFAULT_DRIVER,
     addedAt: now,
   });
 
@@ -103,10 +106,7 @@ export async function rejectFriendRequest(requestId: string): Promise<void> {
   await deleteDoc(doc(db, 'friendRequests', requestId));
 }
 
-export async function removeFriend(
-  currentUid: string,
-  friendUid: string
-): Promise<void> {
+export async function removeFriend(currentUid: string, friendUid: string): Promise<void> {
   await deleteDoc(doc(db, 'users', currentUid, 'friends', friendUid));
   await deleteDoc(doc(db, 'users', friendUid, 'friends', currentUid));
 }

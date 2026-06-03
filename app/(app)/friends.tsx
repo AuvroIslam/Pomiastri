@@ -5,9 +5,9 @@ import {
   StyleSheet,
   ScrollView,
   Alert,
-  TouchableOpacity,
   ActivityIndicator,
   BackHandler,
+  Image,
 } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -21,15 +21,14 @@ import {
   rejectFriendRequest,
   removeFriend,
 } from '@/services/friends';
-import {
-  respondToSessionInvite,
-  joinSessionByCode,
-} from '@/services/sessions';
+import { respondToSessionInvite, joinSessionByCode } from '@/services/sessions';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Card } from '@/components/ui/Card';
 import { FriendItem } from '@/components/friends/FriendItem';
+import { AvatarDisplay } from '@/components/avatar/AvatarDisplay';
 import { Colors, Spacing, FontSize, FontWeight, Radius } from '@/constants/theme';
+import { F1Assets } from '@/constants/drivers';
 import { Friend } from '@/types';
 import { normalizeFriendCode } from '@/utils/code';
 
@@ -37,6 +36,11 @@ export default function FriendsScreen() {
   const router = useRouter();
   const { user, profile } = useAuth();
   const { friends, requests, loading } = useFriends(profile?.uid);
+  const { invites, loading: invitesLoading } = useSessionInvites(profile?.uid);
+  const [addCode, setAddCode] = useState('');
+  const [addLoading, setAddLoading] = useState(false);
+  const [addError, setAddError] = useState('');
+  const [inviteProcessing, setInviteProcessing] = useState<string | null>(null);
 
   useFocusEffect(
     useCallback(() => {
@@ -44,31 +48,21 @@ export default function FriendsScreen() {
         router.replace('/(app)');
         return true;
       });
-
       return () => sub.remove();
     }, [router])
   );
-  const { invites, loading: invitesLoading } = useSessionInvites(profile?.uid);
-  const [addCode, setAddCode] = useState('');
-  const [inviteProcessing, setInviteProcessing] = useState<string | null>(null);
-  const [addLoading, setAddLoading] = useState(false);
-  const [addError, setAddError] = useState('');
 
   async function handleAddFriend() {
     const code = normalizeFriendCode(addCode);
-    if (code.length < 6) {
-      setAddError('Enter a valid 6-character friend code.');
-      return;
-    }
+    if (code.length < 6) { setAddError('Enter a valid 6-character code.'); return; }
     if (!profile) return;
-
     setAddError('');
     setAddLoading(true);
     try {
       const result = await sendFriendRequest(profile, code);
       if (result.success) {
         setAddCode('');
-        Alert.alert('Request Sent', 'Your friend request has been sent!');
+        Alert.alert('Request Sent', 'Friend request sent!');
       } else {
         setAddError(result.error ?? 'Could not send request.');
       }
@@ -79,11 +73,8 @@ export default function FriendsScreen() {
 
   async function handleAccept(requestId: string) {
     if (!profile) return;
-    try {
-      await acceptFriendRequest(requestId, profile.uid);
-    } catch {
-      Alert.alert('Error', 'Could not accept request.');
-    }
+    try { await acceptFriendRequest(requestId, profile.uid); }
+    catch { Alert.alert('Error', 'Could not accept request.'); }
   }
 
   async function handleInviteResponse(
@@ -94,32 +85,17 @@ export default function FriendsScreen() {
     setInviteProcessing(inviteId);
     try {
       if (status === 'accepted') {
-        if (!user || !profile) {
-          Alert.alert('Error', 'Unable to join session. Please sign in again.');
-          return;
-        }
-
-        const result = await joinSessionByCode(
-          joinCode,
-          user.uid,
-          profile.displayName ?? 'Friend'
-        );
-
+        if (!user || !profile) return;
+        const result = await joinSessionByCode(joinCode, user.uid, profile.displayName, profile.avatarId);
         if (!result.success || !result.sessionId) {
           await respondToSessionInvite(inviteId, 'declined');
-          Alert.alert(
-            'Invite unavailable',
-            result.error ||
-              'This session was already ended by the creator.'
-          );
+          Alert.alert('Unavailable', result.error ?? 'Session ended.');
           return;
         }
-
         await respondToSessionInvite(inviteId, 'accepted');
         router.replace(`/(app)/session/${result.sessionId}`);
         return;
       }
-
       await respondToSessionInvite(inviteId, status);
     } catch {
       Alert.alert('Error', `Could not ${status} invite.`);
@@ -128,116 +104,92 @@ export default function FriendsScreen() {
     }
   }
 
-  function handleCopyInvite(joinCode: string) {
-    Clipboard.setStringAsync(joinCode);
-    Alert.alert('Copied', 'Session join code copied to clipboard.');
-  }
-
   async function handleRemove(friend: Friend) {
     if (!profile) return;
-    Alert.alert(
-      'Remove Friend',
-      `Remove ${friend.displayName}?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Remove',
-          style: 'destructive',
-          onPress: () => removeFriend(profile.uid, friend.uid),
-        },
-      ]
-    );
+    Alert.alert('Remove Driver', `Remove ${friend.displayName}?`, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Remove', style: 'destructive', onPress: () => removeFriend(profile.uid, friend.uid) },
+    ]);
   }
 
   return (
     <SafeAreaView style={styles.safe}>
-      <ScrollView contentContainerStyle={styles.container}>
-        <Text style={styles.title}>Friends</Text>
+      <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
+
+        <View style={styles.headerBar}>
+          <Image source={F1Assets.logo} style={styles.f1Logo} resizeMode="contain" />
+          <Text style={styles.title}>FRIENDS</Text>
+        </View>
 
         {/* Add Friend */}
         <Card style={styles.addCard}>
-          <Text style={styles.sectionTitle}>Add a Friend</Text>
+          <Text style={styles.sectionTitle}>ADD DRIVER</Text>
           <View style={styles.addRow}>
             <Input
               value={addCode}
-              onChangeText={(t) => {
-                setAddCode(t.toUpperCase());
-                setAddError('');
-              }}
-              placeholder="Friend code"
+              onChangeText={(t) => { setAddCode(t.toUpperCase()); setAddError(''); }}
+              placeholder="Friend Code"
               maxLength={6}
               autoCapitalize="characters"
               containerStyle={styles.codeInput}
               error={addError}
             />
-            <Button
-              label="Add"
-              onPress={handleAddFriend}
-              loading={addLoading}
-              size="md"
-              style={styles.addBtn}
-            />
+            <Button label="ADD" onPress={handleAddFriend} loading={addLoading} size="md" style={styles.addBtn} />
           </View>
         </Card>
 
-        {/* Incoming Session Invites */}
-        <View>
-          <Text style={styles.sectionTitle}>Session Invites</Text>
-          {invitesLoading ? (
-            <ActivityIndicator color={Colors.primary} />
-          ) : invites.length === 0 ? (
-            <Text style={styles.empty}>No session invites yet.</Text>
-          ) : (
-            invites.map((invite) => (
-              <Card key={invite.id} style={styles.requestCard}>
-                <Text style={styles.requestName}>{invite.fromDisplayName}</Text>
-                <Text style={styles.requestCode}>{invite.joinCode}</Text>
-                <View style={styles.requestActions}>
-                  <Button
-                    label="Copy Code"
-                    onPress={() => handleCopyInvite(invite.joinCode)}
-                    size="sm"
-                    style={styles.acceptBtn}
-                  />
-                  <Button
-                    label="Accept"
-                    onPress={() => handleInviteResponse(invite.id, invite.joinCode, 'accepted')}
-                    loading={inviteProcessing === invite.id}
-                    size="sm"
-                  />
-                  <Button
-                    label="Decline"
-                    onPress={() => handleInviteResponse(invite.id, invite.joinCode, 'declined')}
-                    variant="ghost"
-                    size="sm"
-                  />
-                </View>
-              </Card>
-            ))
-          )}
-        </View>
+        {/* Session Invites */}
+        {(invites.length > 0 || invitesLoading) && (
+          <View>
+            <Text style={styles.sectionTitle}>RACE INVITES</Text>
+            {invitesLoading
+              ? <ActivityIndicator color={Colors.primary} />
+              : invites.map((invite) => (
+                <Card key={invite.id} style={styles.inviteCard}>
+                  <View style={styles.inviteRow}>
+                    <AvatarDisplay avatarId={invite.fromAvatarId} state="happy" size={48} animate={false} />
+                    <View style={styles.inviteInfo}>
+                      <Text style={styles.inviteName}>{invite.fromDisplayName}</Text>
+                      <Text style={styles.inviteCode}>Code: {invite.joinCode}</Text>
+                    </View>
+                  </View>
+                  <View style={styles.inviteActions}>
+                    <Button
+                      label="ACCEPT"
+                      onPress={() => handleInviteResponse(invite.id, invite.joinCode, 'accepted')}
+                      loading={inviteProcessing === invite.id}
+                      size="sm"
+                      style={styles.acceptBtn}
+                    />
+                    <Button
+                      label="DECLINE"
+                      onPress={() => handleInviteResponse(invite.id, invite.joinCode, 'declined')}
+                      variant="ghost"
+                      size="sm"
+                    />
+                  </View>
+                </Card>
+              ))
+            }
+          </View>
+        )}
 
-        {/* Incoming Requests */}
+        {/* Friend Requests */}
         {requests.length > 0 && (
           <View>
-            <Text style={styles.sectionTitle}>Friend Requests</Text>
+            <Text style={styles.sectionTitle}>REQUESTS</Text>
             {requests.map((req) => (
               <Card key={req.id} style={styles.requestCard}>
-                <Text style={styles.requestName}>{req.fromDisplayName}</Text>
-                <Text style={styles.requestCode}>{req.fromFriendCode}</Text>
+                <View style={styles.requestRow}>
+                  <AvatarDisplay avatarId={req.fromAvatarId} state="idle" size={44} animate={false} />
+                  <View style={styles.requestInfo}>
+                    <Text style={styles.requestName}>{req.fromDisplayName}</Text>
+                    <Text style={styles.requestCode}>{req.fromFriendCode}</Text>
+                  </View>
+                </View>
                 <View style={styles.requestActions}>
-                  <Button
-                    label="Accept"
-                    onPress={() => handleAccept(req.id)}
-                    size="sm"
-                    style={styles.acceptBtn}
-                  />
-                  <Button
-                    label="Decline"
-                    onPress={() => rejectFriendRequest(req.id)}
-                    variant="ghost"
-                    size="sm"
-                  />
+                  <Button label="Accept" onPress={() => handleAccept(req.id)} size="sm" style={styles.acceptBtn} />
+                  <Button label="Decline" onPress={() => rejectFriendRequest(req.id)} variant="ghost" size="sm" />
                 </View>
               </Card>
             ))}
@@ -246,28 +198,20 @@ export default function FriendsScreen() {
 
         {/* Friends List */}
         <View>
-          <Text style={styles.sectionTitle}>
-            My Friends ({friends.length})
-          </Text>
-          {loading ? (
-            <ActivityIndicator color={Colors.primary} />
-          ) : friends.length === 0 ? (
-            <Text style={styles.empty}>
-              No friends yet. Add someone with their friend code.
-            </Text>
-          ) : (
-            <Card>
-              {friends.map((friend, index) => (
-                <View key={friend.uid}>
-                  {index > 0 && <View style={styles.divider} />}
-                  <FriendItem
-                    friend={friend}
-                    onRemove={handleRemove}
-                  />
-                </View>
-              ))}
-            </Card>
-          )}
+          <Text style={styles.sectionTitle}>MY TEAM ({friends.length})</Text>
+          {loading
+            ? <ActivityIndicator color={Colors.primary} />
+            : friends.length === 0
+            ? <Text style={styles.empty}>No teammates yet. Add someone with their code.</Text>
+            : <Card>
+                {friends.map((friend, index) => (
+                  <View key={friend.uid}>
+                    {index > 0 && <View style={styles.divider} />}
+                    <FriendItem friend={friend} onRemove={handleRemove} />
+                  </View>
+                ))}
+              </Card>
+          }
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -276,53 +220,28 @@ export default function FriendsScreen() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: Colors.background },
-  container: {
-    paddingHorizontal: Spacing.xl,
-    paddingTop: Spacing.lg,
-    paddingBottom: Spacing.xxl,
-    gap: Spacing.lg,
-  },
-  title: {
-    fontSize: FontSize.xxl,
-    fontWeight: FontWeight.bold,
-    color: Colors.textPrimary,
-  },
-  sectionTitle: {
-    fontSize: FontSize.md,
-    fontWeight: FontWeight.semibold,
-    color: Colors.textSecondary,
-    marginBottom: Spacing.sm,
-  },
+  container: { paddingHorizontal: Spacing.xl, paddingTop: Spacing.md, paddingBottom: Spacing.xxl, gap: Spacing.lg },
+  headerBar: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md },
+  f1Logo: { width: 60, height: 22 },
+  title: { fontSize: FontSize.xl, fontWeight: FontWeight.black, color: Colors.textPrimary, letterSpacing: 4 },
+  sectionTitle: { fontSize: FontSize.xs, fontWeight: FontWeight.black, color: Colors.textMuted, letterSpacing: 2, marginBottom: Spacing.sm },
   addCard: { gap: Spacing.sm },
-  addRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.sm,
-  },
+  addRow: { flexDirection: 'row', alignItems: 'flex-start', gap: Spacing.sm },
   codeInput: { flex: 1 },
-  addBtn: {},
-  requestCard: { gap: Spacing.sm, marginBottom: Spacing.sm },
-  requestName: {
-    fontSize: FontSize.md,
-    fontWeight: FontWeight.semibold,
-    color: Colors.textPrimary,
-  },
-  requestCode: {
-    fontSize: FontSize.xs,
-    color: Colors.textMuted,
-    letterSpacing: 1,
-  },
-  requestActions: { flexDirection: 'row', gap: Spacing.sm },
+  addBtn: { marginTop: 24 },
+  inviteCard: { gap: Spacing.sm, marginBottom: Spacing.sm },
+  inviteRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
+  inviteInfo: { flex: 1 },
+  inviteName: { fontSize: FontSize.md, fontWeight: FontWeight.bold, color: Colors.textPrimary },
+  inviteCode: { fontSize: FontSize.xs, color: Colors.primary, letterSpacing: 2 },
+  inviteActions: { flexDirection: 'row', gap: Spacing.sm },
   acceptBtn: { flex: 1 },
-  empty: {
-    fontSize: FontSize.md,
-    color: Colors.textMuted,
-    textAlign: 'center',
-    paddingVertical: Spacing.xl,
-  },
-  divider: {
-    height: 1,
-    backgroundColor: Colors.divider,
-    marginVertical: Spacing.xs,
-  },
+  requestCard: { gap: Spacing.sm, marginBottom: Spacing.sm },
+  requestRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
+  requestInfo: { flex: 1 },
+  requestName: { fontSize: FontSize.md, fontWeight: FontWeight.bold, color: Colors.textPrimary },
+  requestCode: { fontSize: FontSize.xs, color: Colors.textMuted, letterSpacing: 1 },
+  requestActions: { flexDirection: 'row', gap: Spacing.sm },
+  empty: { fontSize: FontSize.md, color: Colors.textMuted, textAlign: 'center', paddingVertical: Spacing.xl },
+  divider: { height: 1, backgroundColor: Colors.divider, marginVertical: Spacing.xs },
 });

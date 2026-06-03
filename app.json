@@ -1,4 +1,3 @@
-
 {
   "expo": {
     "name": "Pomiastri",
@@ -6,12 +5,12 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "dark",
     "scheme": "pomiastri",
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#E8F4FD",
-        "foregroundImage": "./assets/adaptive-icon.png"
+        "backgroundColor": "#0A0A0A",
+        "foregroundImage": "./assets/f1/drivers/charles/idle.png"
       },
       "package": "com.pomiastri.app",
       "softwareKeyboardLayoutMode": "pan",
@@ -20,18 +19,19 @@
     "plugins": [
       "expo-router",
       "expo-font",
-        ["expo-splash-screen",
+      [
+        "expo-splash-screen",
         {
           "image": "./assets/icon.png",
           "resizeMode": "contain",
-          "backgroundColor": "#E8F4FD"
+          "backgroundColor": "#0A0A0A"
         }
       ],
       [
         "expo-notifications",
         {
           "icon": "./assets/icon.png",
-          "color": "#4A90D9"
+          "color": "#E8002D"
         }
       ]
     ],

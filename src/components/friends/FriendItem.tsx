@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Colors, FontSize, FontWeight, Spacing, Radius } from '@/constants/theme';
 import { Friend } from '@/types';
+import { AvatarDisplay } from '@/components/avatar/AvatarDisplay';
 
 interface FriendItemProps {
   friend: Friend;
@@ -10,29 +11,17 @@ interface FriendItemProps {
 }
 
 export function FriendItem({ friend, onInvite, onRemove }: FriendItemProps) {
-  const initials = friend.displayName
-    .split(' ')
-    .map((w) => w[0])
-    .slice(0, 2)
-    .join('')
-    .toUpperCase();
-
   return (
     <View style={styles.container}>
-      <View style={styles.avatar}>
-        <Text style={styles.avatarText}>{initials}</Text>
-      </View>
+      <AvatarDisplay avatarId={friend.avatarId} state="idle" size={44} animate={false} />
       <View style={styles.info}>
         <Text style={styles.name}>{friend.displayName}</Text>
         <Text style={styles.code}>{friend.friendCode}</Text>
       </View>
       <View style={styles.actions}>
         {onInvite && (
-          <TouchableOpacity
-            onPress={() => onInvite(friend)}
-            style={styles.inviteBtn}
-          >
-            <Text style={styles.inviteText}>Invite</Text>
+          <TouchableOpacity onPress={() => onInvite(friend)} style={styles.inviteBtn}>
+            <Text style={styles.inviteText}>INVITE</Text>
           </TouchableOpacity>
         )}
         {onRemove && (
@@ -52,19 +41,6 @@ const styles = StyleSheet.create({
     gap: Spacing.sm,
     paddingVertical: Spacing.sm,
   },
-  avatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: Colors.primaryLight,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  avatarText: {
-    fontSize: FontSize.md,
-    fontWeight: FontWeight.bold,
-    color: Colors.textOnPrimary,
-  },
   info: { flex: 1 },
   name: {
     fontSize: FontSize.md,
@@ -74,7 +50,7 @@ const styles = StyleSheet.create({
   code: {
     fontSize: FontSize.xs,
     color: Colors.textMuted,
-    letterSpacing: 1,
+    letterSpacing: 1.5,
   },
   actions: { flexDirection: 'row', gap: Spacing.xs },
   inviteBtn: {
@@ -84,16 +60,11 @@ const styles = StyleSheet.create({
     borderRadius: Radius.full,
   },
   inviteText: {
-    fontSize: FontSize.sm,
-    fontWeight: FontWeight.semibold,
+    fontSize: FontSize.xs,
+    fontWeight: FontWeight.black,
     color: Colors.textOnPrimary,
+    letterSpacing: 1,
   },
-  removeBtn: {
-    paddingHorizontal: Spacing.sm,
-    paddingVertical: Spacing.xs,
-  },
-  removeText: {
-    fontSize: FontSize.sm,
-    color: Colors.error,
-  },
+  removeBtn: { paddingHorizontal: Spacing.sm, paddingVertical: Spacing.xs },
+  removeText: { fontSize: FontSize.sm, color: Colors.textMuted },
 });

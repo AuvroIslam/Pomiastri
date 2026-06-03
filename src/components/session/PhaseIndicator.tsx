@@ -22,7 +22,7 @@ export function PhaseIndicator({ phaseCount }: PhaseIndicatorProps) {
         />
       ))}
       <Text style={styles.label}>
-        {phaseCount} {phaseCount === 1 ? 'session' : 'sessions'}
+        {phaseCount} {phaseCount === 1 ? 'lap' : 'laps'}
       </Text>
     </View>
   );

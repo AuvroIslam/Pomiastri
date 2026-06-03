@@ -4,13 +4,15 @@ import {
   Text,
   StyleSheet,
   ScrollView,
-  TouchableOpacity,
   Alert,
   BackHandler,
+  Image,
+  TouchableOpacity,
 } from 'react-native';
-import { useFocusEffect, useRouter } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Clipboard from 'expo-clipboard';
+import * as Haptics from 'expo-haptics';
 import { useAuth } from '@/hooks/useAuth';
 import { useFriends } from '@/hooks/useFriends';
 import { createSession, sendSessionInvite } from '@/services/sessions';
@@ -19,12 +21,19 @@ import { Card } from '@/components/ui/Card';
 import { FriendItem } from '@/components/friends/FriendItem';
 import { Colors, Spacing, FontSize, FontWeight, Radius } from '@/constants/theme';
 import { DEFAULT_SESSION_SETTINGS } from '@/constants/pomodoro';
-import { SessionSettings, Friend } from '@/types';
+import { F1Assets } from '@/constants/drivers';
+import { Friend, SessionMode } from '@/types';
 
 export default function CreateSessionScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ mode?: string }>();
   const { user, profile } = useAuth();
+  const [mode, setMode] = useState<SessionMode>(params.mode === 'solo' ? 'solo' : 'duo');
   const [loading, setLoading] = useState(false);
+  const [createdSessionId, setCreatedSessionId] = useState<string | null>(null);
+  const [joinCode, setJoinCode] = useState<string | null>(null);
+  const [sentInvites, setSentInvites] = useState<string[]>([]);
+  const { friends } = useFriends(profile?.uid);
 
   useFocusEffect(
     useCallback(() => {
@@ -32,151 +41,153 @@ export default function CreateSessionScreen() {
         router.replace('/(app)');
         return true;
       });
-
       return () => sub.remove();
     }, [router])
   );
-  const [createdSessionId, setCreatedSessionId] = useState<string | null>(null);
-  const [joinCode, setJoinCode] = useState<string | null>(null);
-  const { friends, loading: friendsLoading } = useFriends(profile?.uid);
-
-  // Simple settings — MVP uses defaults
-  const settings: SessionSettings = DEFAULT_SESSION_SETTINGS;
 
   async function handleCreate() {
     if (!user || !profile) return;
     setLoading(true);
     try {
-      const result = await createSession(user.uid, profile.displayName, settings);
+      const result = await createSession(
+        user.uid,
+        profile.displayName,
+        profile.avatarId,
+        DEFAULT_SESSION_SETTINGS,
+        mode
+      );
+      // Solo: skip the invite step, go straight to the track.
+      if (mode === 'solo') {
+        router.replace(`/(app)/session/${result.sessionId}`);
+        return;
+      }
       setCreatedSessionId(result.sessionId);
       setJoinCode(result.joinCode);
     } catch {
-      Alert.alert('Error', 'Could not create session. Please try again.');
+      Alert.alert('Error', 'Could not create session.');
     } finally {
       setLoading(false);
     }
   }
 
-  async function handleCopyJoinCode() {
+  async function handleCopyCode() {
     if (!joinCode) return;
     await Clipboard.setStringAsync(joinCode);
-    Alert.alert('Copied', 'Session join code copied to clipboard.');
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    Alert.alert('Copied!', 'Join code copied to clipboard.');
   }
 
-  const [inviteLoading, setInviteLoading] = useState<string | null>(null);
-
-  async function handleInvite(friend: Friend) {
-    if (!joinCode || !createdSessionId || !user) return;
-    setInviteLoading(friend.uid);
+  async function handleInviteFriend(friend: Friend) {
+    if (!createdSessionId || !joinCode || !user || !profile) return;
     try {
       await sendSessionInvite(
         createdSessionId,
         joinCode,
         user.uid,
-        profile?.displayName ?? 'Someone',
+        profile.displayName,
+        profile.avatarId,
         friend.uid
       );
-      Alert.alert('Invite sent', `${friend.displayName} has been invited.`);
+      setSentInvites((prev) => [...prev, friend.uid]);
+      Alert.alert('Invite Sent', `${friend.displayName} has been invited to race!`);
     } catch {
-      Alert.alert('Error', 'Could not send invite. Please try again.');
-    } finally {
-      setInviteLoading(null);
+      Alert.alert('Error', 'Could not send invite.');
     }
+  }
+
+  function handleEnterSession() {
+    if (!createdSessionId) return;
+    router.replace(`/(app)/session/${createdSessionId}`);
   }
 
   return (
     <SafeAreaView style={styles.safe}>
-      <ScrollView contentContainerStyle={styles.container}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <Text style={styles.backText}>← Back</Text>
-        </TouchableOpacity>
+      <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
 
-        <Text style={styles.title}>New Study Session</Text>
-        <Text style={styles.subtitle}>
-          Create a room and share the code with a friend.
-        </Text>
+        <View style={styles.headerBar}>
+          <Image source={F1Assets.logo} style={styles.f1Logo} resizeMode="contain" />
+          <Text style={styles.title}>{mode === 'solo' ? 'SOLO PRACTICE' : 'CREATE GRAND PRIX'}</Text>
+        </View>
 
-        {/* Session Settings Preview */}
-        <Card style={styles.settingsCard}>
-          <Text style={styles.settingsTitle}>Session Settings</Text>
-          <SettingRow
-            label="Focus"
-            value={`${settings.focusDuration / 60} min`}
-            emoji="🎯"
-          />
-          <View style={styles.divider} />
-          <SettingRow
-            label="Short Break"
-            value={`${settings.shortBreakDuration / 60} min`}
-            emoji="☕"
-          />
-          <View style={styles.divider} />
-          <SettingRow
-            label="Long Break"
-            value={`${settings.longBreakDuration / 60} min`}
-            emoji="🌿"
-          />
-        </Card>
-
-        {createdSessionId ? (
+        {!createdSessionId ? (
           <>
-            <Card style={styles.joinCodeCard}>
-              <Text style={styles.settingsTitle}>Session Created</Text>
-              <Text style={styles.joinCodeLabel}>Join code</Text>
-              <Text style={styles.joinCodeValue}>{joinCode}</Text>
-              <Button
-                label="Copy Code"
-                onPress={handleCopyJoinCode}
-                size="md"
-                style={styles.copyBtn}
-              />
+            {/* Mode toggle */}
+            <View style={styles.toggle}>
+              <TouchableOpacity
+                style={[styles.segment, mode === 'duo' && styles.segmentActive]}
+                onPress={() => setMode('duo')}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.segmentText, mode === 'duo' && styles.segmentTextActive]}>
+                  DUO RACE
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.segment, mode === 'solo' && styles.segmentActive]}
+                onPress={() => setMode('solo')}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.segmentText, mode === 'solo' && styles.segmentTextActive]}>
+                  SOLO PRACTICE
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            <Card style={styles.settingsCard}>
+              <Text style={styles.sectionTitle}>RACE SETTINGS</Text>
+              <SettingRow label="Race Lap" value="25 min" />
+              <View style={styles.divider} />
+              <SettingRow label="Pit Stop" value="5 min" />
+              <View style={styles.divider} />
+              <SettingRow label="Safety Car" value="15 min" />
             </Card>
 
             <Card style={styles.infoCard}>
               <Text style={styles.infoText}>
-                Your session is ready. Invite a friend below or copy the code and share it directly. The session will wait for someone to join.
+                {mode === 'solo'
+                  ? 'Practice focus on your own. Solo laps earn half points — perfect when no teammate is around.'
+                  : 'Create a Grand Prix to get a Pit Pass code. Share it with your co-driver or invite them directly from your team list.'}
               </Text>
             </Card>
 
-            <Card style={styles.friendCard}>
-              <Text style={styles.settingsTitle}>Invite Friends</Text>
-              {friendsLoading ? (
-                <Text style={styles.friendText}>Loading friends…</Text>
-              ) : friends.length === 0 ? (
-                <Text style={styles.friendText}>
-                  You have no friends yet. Add friends first to invite them here.
-                </Text>
-              ) : (
-                friends.map((friend, index) => (
-                  <React.Fragment key={friend.uid}>
-                    {index > 0 && <View style={styles.friendDivider} />}
-                    <FriendItem friend={friend} onInvite={handleInvite} />
-                  </React.Fragment>
-                ))
-              )}
-            </Card>
-
             <Button
-              label="Open Session"
-              onPress={() => router.replace(`/(app)/session/${createdSessionId}`)}
+              label={mode === 'solo' ? 'START SOLO RACE' : 'BUILD THE GRID'}
+              onPress={handleCreate}
+              loading={loading}
               size="lg"
             />
           </>
         ) : (
           <>
-            <Card style={styles.infoCard}>
-              <Text style={styles.infoText}>
-                After creating, you'll get a join code. Share it with your study partner.
-                The session starts when they join and you press Start.
-              </Text>
+            {/* Join code */}
+            <Card elevated style={styles.codeCard}>
+              <Text style={styles.codeLabel}>YOUR PIT PASS CODE</Text>
+              <Text style={styles.codeValue}>{joinCode}</Text>
+              <Button label="COPY CODE" onPress={handleCopyCode} variant="secondary" size="sm" />
             </Card>
 
-            <Button
-              label="Create Session"
-              onPress={handleCreate}
-              loading={loading}
-              size="lg"
-            />
+            {/* Invite friends */}
+            {friends.length > 0 && (
+              <View>
+                <Text style={styles.sectionTitle}>INVITE TEAMMATES</Text>
+                <Card>
+                  {friends.map((friend, index) => (
+                    <View key={friend.uid}>
+                      {index > 0 && <View style={styles.divider} />}
+                      <FriendItem
+                        friend={friend}
+                        onInvite={sentInvites.includes(friend.uid) ? undefined : handleInviteFriend}
+                      />
+                      {sentInvites.includes(friend.uid) && (
+                        <Text style={styles.invitedBadge}>Invited</Text>
+                      )}
+                    </View>
+                  ))}
+                </Card>
+              </View>
+            )}
+
+            <Button label="ENTER THE GRID" onPress={handleEnterSession} size="lg" />
           </>
         )}
       </ScrollView>
@@ -184,18 +195,9 @@ export default function CreateSessionScreen() {
   );
 }
 
-function SettingRow({
-  label,
-  value,
-  emoji,
-}: {
-  label: string;
-  value: string;
-  emoji: string;
-}) {
+function SettingRow({ label, value }: { label: string; value: string }) {
   return (
     <View style={settingStyles.row}>
-      <Text style={settingStyles.emoji}>{emoji}</Text>
       <Text style={settingStyles.label}>{label}</Text>
       <Text style={settingStyles.value}>{value}</Text>
     </View>
@@ -203,81 +205,36 @@ function SettingRow({
 }
 
 const settingStyles = StyleSheet.create({
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.sm,
-    paddingVertical: Spacing.xs,
-  },
-  emoji: { fontSize: FontSize.lg },
-  label: { flex: 1, fontSize: FontSize.md, color: Colors.textPrimary },
-  value: {
-    fontSize: FontSize.md,
-    fontWeight: FontWeight.semibold,
-    color: Colors.primary,
-  },
+  row: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: Spacing.xs },
+  label: { fontSize: FontSize.md, color: Colors.textSecondary },
+  value: { fontSize: FontSize.md, fontWeight: FontWeight.bold, color: Colors.primary },
 });
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: Colors.background },
-  container: {
-    paddingHorizontal: Spacing.xl,
-    paddingTop: Spacing.lg,
-    paddingBottom: Spacing.xxl,
-    gap: Spacing.lg,
-  },
-  backBtn: { marginBottom: Spacing.xs },
-  backText: {
-    fontSize: FontSize.md,
-    color: Colors.primary,
-    fontWeight: FontWeight.medium,
-  },
-  title: {
-    fontSize: FontSize.xxl,
-    fontWeight: FontWeight.bold,
-    color: Colors.textPrimary,
-  },
-  subtitle: { fontSize: FontSize.md, color: Colors.textSecondary },
-  settingsCard: { gap: Spacing.sm },
-  settingsTitle: {
-    fontSize: FontSize.sm,
-    fontWeight: FontWeight.semibold,
-    color: Colors.textMuted,
-    letterSpacing: 0.5,
-    textTransform: 'uppercase',
-    marginBottom: Spacing.xs,
-  },
-  divider: { height: 1, backgroundColor: Colors.divider },
-  infoCard: { backgroundColor: Colors.surfaceElevated, borderColor: Colors.border },
-  infoText: {
-    fontSize: FontSize.sm,
-    color: Colors.textSecondary,
-    lineHeight: 20,
-  },
-  joinCodeCard: {
-    gap: Spacing.sm,
-    backgroundColor: Colors.surfaceElevated,
+  container: { paddingHorizontal: Spacing.xl, paddingTop: Spacing.md, paddingBottom: Spacing.xxl, gap: Spacing.lg },
+  headerBar: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md },
+  f1Logo: { width: 60, height: 22 },
+  title: { fontSize: FontSize.xl, fontWeight: FontWeight.black, color: Colors.textPrimary, letterSpacing: 3 },
+  toggle: {
+    flexDirection: 'row',
+    backgroundColor: Colors.surface,
+    borderRadius: Radius.md,
+    padding: 4,
+    borderWidth: 1,
     borderColor: Colors.border,
   },
-  joinCodeLabel: {
-    fontSize: FontSize.xs,
-    color: Colors.textSecondary,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    marginBottom: Spacing.xs,
-  },
-  joinCodeValue: {
-    fontSize: FontSize.xxxl,
-    fontWeight: FontWeight.bold,
-    color: Colors.textPrimary,
-    letterSpacing: 8,
-  },
-  copyBtn: { width: '100%' },
-  friendCard: { gap: Spacing.sm },
-  friendText: {
-    fontSize: FontSize.sm,
-    color: Colors.textSecondary,
-    lineHeight: 20,
-  },
-  friendDivider: { height: 1, backgroundColor: Colors.divider },
+  segment: { flex: 1, alignItems: 'center', paddingVertical: Spacing.sm, borderRadius: Radius.sm },
+  segmentActive: { backgroundColor: Colors.primary },
+  segmentText: { fontSize: FontSize.sm, fontWeight: FontWeight.black, color: Colors.textMuted, letterSpacing: 1 },
+  segmentTextActive: { color: Colors.textOnPrimary },
+  sectionTitle: { fontSize: FontSize.xs, fontWeight: FontWeight.black, color: Colors.textMuted, letterSpacing: 2, marginBottom: Spacing.sm },
+  settingsCard: { gap: Spacing.xs },
+  divider: { height: 1, backgroundColor: Colors.divider },
+  infoCard: { backgroundColor: Colors.surfaceElevated },
+  infoText: { fontSize: FontSize.sm, color: Colors.textSecondary, lineHeight: 20 },
+  codeCard: { alignItems: 'center', gap: Spacing.sm, paddingVertical: Spacing.lg },
+  codeLabel: { fontSize: FontSize.xs, color: Colors.textMuted, letterSpacing: 2 },
+  codeValue: { fontSize: FontSize.xxxl, fontWeight: FontWeight.black, color: Colors.primary, letterSpacing: 8 },
+  invitedBadge: { fontSize: FontSize.xs, color: Colors.success, fontWeight: FontWeight.bold, letterSpacing: 1, paddingLeft: Spacing.md, paddingBottom: Spacing.xs },
 });

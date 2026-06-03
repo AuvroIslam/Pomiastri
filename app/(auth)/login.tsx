@@ -9,37 +9,35 @@ import {
   TouchableOpacity,
   BackHandler,
   Alert,
+  Image,
+  ImageBackground,
 } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { loginUser } from '@/services/auth';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
-import { Colors, Spacing, FontSize, FontWeight } from '@/constants/theme';
+import { Colors, Spacing, FontSize, FontWeight, Radius } from '@/constants/theme';
+import { F1Assets } from '@/constants/drivers';
 
 export default function LoginScreen() {
   const router = useRouter();
   const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
   useFocusEffect(
     useCallback(() => {
       const sub = BackHandler.addEventListener('hardwareBackPress', () => {
-        Alert.alert(
-          'Exit App',
-          'Do you want to exit the app?',
-          [
-            { text: 'Cancel', style: 'cancel' },
-            { text: 'Exit', style: 'destructive', onPress: () => BackHandler.exitApp() },
-          ]
-        );
+        Alert.alert('Exit App', 'Do you want to exit?', [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Exit', style: 'destructive', onPress: () => BackHandler.exitApp() },
+        ]);
         return true;
       });
-
       return () => sub.remove();
     }, [])
   );
-  const [password, setPassword] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
 
   async function handleLogin() {
     if (!email.trim() || !password) {
@@ -50,7 +48,6 @@ export default function LoginScreen() {
     setLoading(true);
     try {
       await loginUser(email.trim(), password);
-      // AuthContext + Stack.Protected handle navigation automatically
     } catch (e: any) {
       setError(friendlyAuthError(e.code));
     } finally {
@@ -67,33 +64,37 @@ export default function LoginScreen() {
         contentContainerStyle={styles.container}
         keyboardShouldPersistTaps="handled"
       >
+        {/* F1 Logo */}
         <View style={styles.header}>
-          <Text style={styles.logo}>🌿</Text>
-          <Text style={styles.title}>Pomiastri</Text>
-          <Text style={styles.subtitle}>Study together, stay focused.</Text>
+          <Image source={F1Assets.logo} style={styles.logo} resizeMode="contain" />
+          <Text style={styles.appName}>POMIASTRI</Text>
+          <Text style={styles.tagline}>Study. Race. Dominate.</Text>
         </View>
+
+        {/* Checkered divider */}
+        <Image source={F1Assets.checkerBox} style={styles.divider} resizeMode="repeat" />
 
         <View style={styles.form}>
           <Input
-            label="Email"
+            label="EMAIL"
             value={email}
             onChangeText={setEmail}
-            placeholder="you@example.com"
+            placeholder="driver@team.com"
             keyboardType="email-address"
             autoCapitalize="none"
             autoComplete="email"
           />
           <Input
-            label="Password"
+            label="PASSWORD"
             value={password}
             onChangeText={setPassword}
-            placeholder="Your password"
+            placeholder="••••••••"
             secureToggle
           />
           {error ? <Text style={styles.error}>{error}</Text> : null}
 
           <Button
-            label="Sign In"
+            label="START ENGINE"
             onPress={handleLogin}
             loading={loading}
             size="lg"
@@ -106,8 +107,8 @@ export default function LoginScreen() {
           style={styles.switchLink}
         >
           <Text style={styles.switchText}>
-            New here?{' '}
-            <Text style={styles.switchBold}>Create an account</Text>
+            New driver?{' '}
+            <Text style={styles.switchBold}>Join the Grid</Text>
           </Text>
         </TouchableOpacity>
       </ScrollView>
@@ -138,33 +139,35 @@ const styles = StyleSheet.create({
     paddingTop: Spacing.xxxl,
     paddingBottom: Spacing.xxl,
     justifyContent: 'center',
-    gap: Spacing.xl,
+    gap: Spacing.lg,
   },
   header: { alignItems: 'center', gap: Spacing.sm },
-  logo: { fontSize: 56 },
-  title: {
+  logo: { width: 120, height: 40 },
+  appName: {
     fontSize: FontSize.xxl,
-    fontWeight: FontWeight.bold,
+    fontWeight: FontWeight.black,
     color: Colors.textPrimary,
+    letterSpacing: 6,
   },
-  subtitle: {
-    fontSize: FontSize.md,
+  tagline: {
+    fontSize: FontSize.sm,
     color: Colors.textSecondary,
+    letterSpacing: 2,
+  },
+  divider: {
+    width: '100%',
+    height: 8,
+    opacity: 0.3,
   },
   form: { gap: Spacing.md },
   error: {
     fontSize: FontSize.sm,
-    color: Colors.error,
+    color: Colors.primary,
     textAlign: 'center',
+    fontWeight: FontWeight.medium,
   },
   submitBtn: { marginTop: Spacing.sm },
   switchLink: { alignItems: 'center' },
-  switchText: {
-    fontSize: FontSize.md,
-    color: Colors.textSecondary,
-  },
-  switchBold: {
-    fontWeight: FontWeight.semibold,
-    color: Colors.primary,
-  },
+  switchText: { fontSize: FontSize.md, color: Colors.textSecondary },
+  switchBold: { fontWeight: FontWeight.bold, color: Colors.primary },
 });

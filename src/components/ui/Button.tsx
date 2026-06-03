@@ -51,7 +51,7 @@ export function Button({
       {loading ? (
         <ActivityIndicator
           size="small"
-          color={variant === 'primary' ? Colors.textOnPrimary : Colors.primary}
+          color={variant === 'primary' || variant === 'danger' ? Colors.textOnPrimary : Colors.primary}
         />
       ) : (
         <Text
@@ -80,19 +80,23 @@ const styles = StyleSheet.create({
   size_lg: { paddingVertical: Spacing.md, paddingHorizontal: Spacing.xl, minHeight: 56 },
 
   variant_primary: { backgroundColor: Colors.primary },
-  variant_secondary: { backgroundColor: Colors.surfaceElevated, borderWidth: 1, borderColor: Colors.border },
+  variant_secondary: {
+    backgroundColor: 'transparent',
+    borderWidth: 1.5,
+    borderColor: Colors.primary,
+  },
   variant_ghost: { backgroundColor: 'transparent' },
-  variant_danger: { backgroundColor: Colors.error },
+  variant_danger: { backgroundColor: Colors.primaryDark },
 
-  disabled: { opacity: 0.45 },
+  disabled: { opacity: 0.4 },
 
-  label: { fontWeight: FontWeight.semibold },
+  label: { fontWeight: FontWeight.bold, letterSpacing: 0.5 },
   labelSize_sm: { fontSize: FontSize.sm },
   labelSize_md: { fontSize: FontSize.md },
   labelSize_lg: { fontSize: FontSize.lg },
 
   labelVariant_primary: { color: Colors.textOnPrimary },
-  labelVariant_secondary: { color: Colors.textPrimary },
-  labelVariant_ghost: { color: Colors.primary },
+  labelVariant_secondary: { color: Colors.primary },
+  labelVariant_ghost: { color: Colors.textSecondary },
   labelVariant_danger: { color: Colors.textOnPrimary },
 });

@@ -1,14 +1,13 @@
-import React, { useCallback, useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
   KeyboardAvoidingView,
   Platform,
-  TouchableOpacity,
   Alert,
   BackHandler,
+  Image,
 } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -17,11 +16,14 @@ import { joinSessionByCode } from '@/services/sessions';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Colors, Spacing, FontSize, FontWeight } from '@/constants/theme';
+import { F1Assets } from '@/constants/drivers';
 
 export default function JoinSessionScreen() {
   const router = useRouter();
   const { user, profile } = useAuth();
   const [joinCode, setJoinCode] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
   useFocusEffect(
     useCallback(() => {
@@ -29,25 +31,18 @@ export default function JoinSessionScreen() {
         router.replace('/(app)');
         return true;
       });
-
       return () => sub.remove();
     }, [router])
   );
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
 
   async function handleJoin() {
     const code = joinCode.trim().toUpperCase();
-    if (code.length < 6) {
-      setError('Enter a valid 6-character session code.');
-      return;
-    }
+    if (code.length < 6) { setError('Enter a valid 6-character code.'); return; }
     if (!user || !profile) return;
-
     setError('');
     setLoading(true);
     try {
-      const result = await joinSessionByCode(code, user.uid, profile.displayName);
+      const result = await joinSessionByCode(code, user.uid, profile.displayName, profile.avatarId);
       if (result.success && result.sessionId) {
         router.replace(`/(app)/session/${result.sessionId}`);
       } else {
@@ -62,50 +57,44 @@ export default function JoinSessionScreen() {
 
   return (
     <SafeAreaView style={styles.safe}>
-      <KeyboardAvoidingView
-        style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      >
-        <ScrollView
-          contentContainerStyle={styles.container}
-          keyboardShouldPersistTaps="handled"
-        >
-          <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-            <Text style={styles.backText}>← Back</Text>
-          </TouchableOpacity>
-
-          <View style={styles.icon}>
-            <Text style={styles.iconText}>🔑</Text>
+      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <View style={styles.container}>
+          <View style={styles.headerBar}>
+            <Image source={F1Assets.logo} style={styles.f1Logo} resizeMode="contain" />
+            <Text style={styles.title}>JOIN THE GRID</Text>
           </View>
 
-          <Text style={styles.title}>Join a Session</Text>
-          <Text style={styles.subtitle}>
-            Enter the 6-character code your study partner shared with you.
-          </Text>
+          <View style={styles.iconArea}>
+            <Image source={F1Assets.checkedFlag} style={styles.bigFlag} resizeMode="contain" />
+            <Text style={styles.subtitle}>Enter the Pit Pass code from your co-driver</Text>
+          </View>
 
           <Input
-            label="Session Code"
+            label="PIT PASS CODE"
             value={joinCode}
-            onChangeText={(t) => {
-              setJoinCode(t.toUpperCase());
-              setError('');
-            }}
+            onChangeText={(t) => { setJoinCode(t.toUpperCase()); setError(''); }}
             placeholder="XXXXXX"
             maxLength={6}
             autoCapitalize="characters"
             autoCorrect={false}
             error={error}
-            style={styles.codeInput}
           />
 
           <Button
-            label="Join Session"
+            label="JOIN THE GRID"
             onPress={handleJoin}
             loading={loading}
             size="lg"
             disabled={joinCode.length < 6}
           />
-        </ScrollView>
+
+          <Button
+            label="Back"
+            onPress={() => router.replace('/(app)')}
+            variant="ghost"
+            size="md"
+          />
+        </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -115,36 +104,16 @@ const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: Colors.background },
   flex: { flex: 1 },
   container: {
+    flex: 1,
     paddingHorizontal: Spacing.xl,
-    paddingTop: Spacing.lg,
+    paddingTop: Spacing.md,
     paddingBottom: Spacing.xxl,
     gap: Spacing.lg,
-    flexGrow: 1,
   },
-  backBtn: {},
-  backText: {
-    fontSize: FontSize.md,
-    color: Colors.primary,
-    fontWeight: FontWeight.medium,
-  },
-  icon: { alignItems: 'center', marginTop: Spacing.xl },
-  iconText: { fontSize: 64 },
-  title: {
-    fontSize: FontSize.xxl,
-    fontWeight: FontWeight.bold,
-    color: Colors.textPrimary,
-    textAlign: 'center',
-  },
-  subtitle: {
-    fontSize: FontSize.md,
-    color: Colors.textSecondary,
-    textAlign: 'center',
-    lineHeight: 22,
-  },
-  codeInput: {
-    textAlign: 'center',
-    letterSpacing: 8,
-    fontSize: FontSize.xl,
-    fontWeight: FontWeight.bold,
-  },
+  headerBar: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md },
+  f1Logo: { width: 60, height: 22 },
+  title: { fontSize: FontSize.xl, fontWeight: FontWeight.black, color: Colors.textPrimary, letterSpacing: 3 },
+  iconArea: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: Spacing.md },
+  bigFlag: { width: 100, height: 70 },
+  subtitle: { fontSize: FontSize.md, color: Colors.textSecondary, textAlign: 'center' },
 });

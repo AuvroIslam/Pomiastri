@@ -1,38 +1,50 @@
+// F1 Dark Theme
 export const Colors = {
-  // Primary palette — calm blue
-  primary: '#4A90D9',
-  primaryLight: '#7BB3E8',
-  primaryDark: '#2D6FAF',
+  // Core
+  background: '#0A0A0A',
+  surface: '#141414',
+  surfaceElevated: '#1E1E1E',
+  surfaceCard: '#1A1A1A',
 
-  // Surface colors
-  background: '#F0F7FF',
-  surface: '#FFFFFF',
-  surfaceElevated: '#EAF3FD',
+  // F1 Brand
+  primary: '#E8002D',       // F1 red
+  primaryDark: '#B8001F',
+  primaryLight: '#FF1744',
 
-  // Text
-  textPrimary: '#1A2A3A',
-  textSecondary: '#5A7080',
-  textMuted: '#9AAFBF',
+  // Text  (textMuted bumped from #555 → #8A8A8A for WCAG AA contrast on #0A0A0A)
+  textPrimary: '#FFFFFF',
+  textSecondary: '#AAAAAA',
+  textMuted: '#8A8A8A',
+  textFaint: '#555555', // decorative only — empty dots, dashed borders (not text)
   textOnPrimary: '#FFFFFF',
 
-  // Phase accent colors
-  focusAccent: '#4A90D9',    // blue
-  shortBreakAccent: '#4ABFA0', // teal
-  longBreakAccent: '#7B8FC0',  // soft indigo
+  // Accents
+  gold: '#FFD700',
+  silver: '#C0C0C0',
+  bronze: '#CD7F32',
+
+  // Pomodoro phase accents
+  focusAccent: '#E8002D',
+  shortBreakAccent: '#00D4FF',
+  longBreakAccent: '#7B2FBE',
 
   // Semantic
-  success: '#4CAF7C',
-  warning: '#F5A623',
-  error: '#E85D5D',
-  errorLight: '#FFF0F0',
+  success: '#00C853',
+  warning: '#FFD600',
+  error: '#E8002D',
+  errorLight: '#2A0008',
 
-  // Border / divider
-  border: '#D8E8F5',
-  divider: '#EAF0F7',
+  // Borders / dividers
+  border: '#2A2A2A',
+  divider: '#1E1E1E',
 
-  // Focus broken state
-  brokenBg: '#FFF4F4',
-  brokenAccent: '#E85D5D',
+  // Focus broken
+  brokenBg: '#1A0004',
+  brokenAccent: '#E8002D',
+
+  // Overlays
+  overlay: 'rgba(0,0,0,0.85)',
+  overlayLight: 'rgba(0,0,0,0.5)',
 } as const;
 
 export const Spacing = {
@@ -46,8 +58,8 @@ export const Spacing = {
 } as const;
 
 export const Radius = {
-  sm: 8,
-  md: 12,
+  sm: 6,
+  md: 10,
   lg: 16,
   xl: 24,
   full: 999,
@@ -60,8 +72,8 @@ export const FontSize = {
   lg: 17,
   xl: 20,
   xxl: 28,
-  xxxl: 48,
-  timer: 72,
+  xxxl: 40,
+  timer: 68,
 } as const;
 
 export const FontWeight = {
@@ -69,21 +81,29 @@ export const FontWeight = {
   medium: '500' as const,
   semibold: '600' as const,
   bold: '700' as const,
+  black: '900' as const,
 };
 
 export const Shadow = {
   sm: {
-    shadowColor: '#1A2A3A',
+    shadowColor: '#E8002D',
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06,
+    shadowOpacity: 0.15,
     shadowRadius: 4,
-    elevation: 2,
+    elevation: 3,
   },
   md: {
-    shadowColor: '#1A2A3A',
+    shadowColor: '#E8002D',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
+    shadowOpacity: 0.2,
     shadowRadius: 8,
-    elevation: 4,
+    elevation: 6,
+  },
+  glow: {
+    shadowColor: '#E8002D',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.6,
+    shadowRadius: 12,
+    elevation: 8,
   },
 };

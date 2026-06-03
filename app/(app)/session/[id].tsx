@@ -1,4 +1,4 @@
-import React, { useEffect, useCallback, useRef } from 'react';
+import React, { useEffect, useCallback, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -6,7 +6,7 @@ import {
   BackHandler,
   Alert,
   TouchableOpacity,
-  ScrollView,
+  Image,
 } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -15,24 +15,26 @@ import * as Haptics from 'expo-haptics';
 import { useAuth } from '@/hooks/useAuth';
 import { useSession } from '@/hooks/useSession';
 import { useTimer } from '@/hooks/useTimer';
-import { useAppState } from '@/hooks/useAppState';
+import { useGracePeriod } from '@/hooks/useGracePeriod';
 import {
-  startSession,
-  pauseSession,
-  resumeSession,
-  advancePhase,
-  endSession,
-  markSessionBroken,
-  cancelSession,
-  saveSessionHistory,
+  startSession, pauseSession, resumeSession,
+  advancePhase, endSession, leaveSession,
+  cancelSession, saveSessionHistory, phasePointsFor,
+  POINTS_FULL_COMPLETE, POINTS_PARTNER_LEFT_BONUS,
+  POINTS_SOLO_BONUS, POINTS_LEAVE_PENALTY,
 } from '@/services/sessions';
 import { recordSessionCompletion } from '@/services/users';
 import { TimerDisplay } from '@/components/ui/TimerDisplay';
 import { Button } from '@/components/ui/Button';
-import { PartnerStatus } from '@/components/session/PartnerStatus';
 import { PhaseIndicator } from '@/components/session/PhaseIndicator';
+import { AvatarDisplay } from '@/components/avatar/AvatarDisplay';
+import { GridStartLights, LightStage } from '@/components/ui/GridStartLights';
+import { CheckeredFlag } from '@/components/ui/CheckeredFlag';
+import { PointsToast } from '@/components/ui/PointsToast';
 import { Colors, Spacing, FontSize, FontWeight, Radius } from '@/constants/theme';
-import { getNextPhase, getPhaseDuration } from '@/constants/pomodoro';
+import { F1Assets, DriverState } from '@/constants/drivers';
+import { getNextPhase, getPhaseDuration, PHASE_LABELS } from '@/constants/pomodoro';
+import { PomodoroPhase } from '@/types';
 
 export default function SessionScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -42,137 +44,213 @@ export default function SessionScreen() {
   const displaySeconds = useTimer(session);
   const phaseAdvancedRef = useRef(false);
 
+  const [lightStage, setLightStage] = useState<LightStage>('empty');
+  const [showCheckeredFlag, setShowCheckeredFlag] = useState(false);
+  const [pointsToast, setPointsToast] = useState<number | null>(null);
+  const prevStatusRef = useRef<string | null>(null);
+  const prevPhaseCountRef = useRef<number>(0);
+
+  const isSolo = session?.mode === 'solo';
   const isHost = session?.hostId === user?.uid;
-  const isParticipant = session?.participantId === user?.uid;
   const partnerName = isHost ? session?.participantDisplayName : session?.hostDisplayName;
+  const partnerAvatarId = isHost ? session?.participantAvatarId : session?.hostAvatarId;
   const partnerConnected = isHost ? !!session?.participantId : !!session?.hostId;
   const myFocusBroken = isHost ? session?.hostFocusBroken : session?.participantFocusBroken;
   const partnerFocusBroken = isHost ? session?.participantFocusBroken : session?.hostFocusBroken;
+  const partnerHasLeft = session
+    ? (session.leftParticipants ?? []).includes(isHost ? (session.participantId ?? '') : session.hostId)
+    : false;
+  const iHaveLeft = session ? (session.leftParticipants ?? []).includes(user?.uid ?? '') : false;
 
-  // ─── Auto-advance phase when timer hits 0 ─────────────────���──────────────────
+  // Points derived from Firestore — same value for both users. Solo earns less.
+  const phasePts = phasePointsFor(session?.mode ?? 'duo');
+  const sessionPhasePoints = (session?.timerState.phaseCount ?? 0) * phasePts;
+
+  function completionBonus(): number {
+    if (!session || session.status !== 'completed') return 0;
+    if (isSolo) return POINTS_SOLO_BONUS;
+    return (session.leftParticipants?.length ?? 0) > 0
+      ? POINTS_PARTNER_LEFT_BONUS
+      : POINTS_FULL_COMPLETE;
+  }
+
+  // ─── My avatar state — changes based on what I'm doing ──────────────────────
+  function getMyState(): DriverState {
+    if (iHaveLeft || myFocusBroken) return 'sad';
+    if (!session) return 'idle';
+    if (session.status === 'completed') return 'happy';
+    if (session.status === 'waiting') return 'idle';
+    if (session.timerState.phase === 'focus' && session.timerState.isRunning) return 'focus';
+    if (session.timerState.phase !== 'focus') return 'happy'; // break time
+    if (session.status === 'paused') return 'idle';
+    return 'focus';
+  }
+
+  // ─── Partner avatar state — mirrors their situation ─────────────────────────
+  function getPartnerState(): DriverState {
+    if (partnerHasLeft || partnerFocusBroken) return 'sad';
+    if (!session || !partnerConnected) return 'idle';
+    if (session.status === 'completed') return 'happy';
+    if (session.status === 'waiting') return 'idle';
+    if (session.timerState.phase === 'focus' && session.timerState.isRunning) return 'focus';
+    if (session.timerState.phase !== 'focus') return 'happy';
+    if (session.status === 'paused') return 'idle';
+    return 'focus';
+  }
+
+  // ─── Start lights stage driven by session state ──────────────────────────────
   useEffect(() => {
-    if (!session || !isHost) return;
-    if (session.status !== 'active') return;
-    if (displaySeconds > 0) {
-      phaseAdvancedRef.current = false;
-      return;
+    if (!session) return;
+    const prev = prevStatusRef.current;
+    const curr = session.status;
+
+    if (curr === 'waiting') {
+      // Solo: lights are ready immediately (no partner to wait for)
+      setLightStage(isSolo ? 'ready' : session.participantId ? 'building' : 'empty');
+    } else if (prev === 'waiting' && (curr === 'active' || curr === 'solo')) {
+      setLightStage('go');
+    } else if (curr === 'active' || curr === 'solo' || curr === 'paused') {
+      setLightStage('racing');
     }
-    if (phaseAdvancedRef.current) return;
 
-    phaseAdvancedRef.current = true;
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    prevStatusRef.current = curr;
+  }, [session?.status, session?.participantId]);
 
-    const { timerState, settings } = session;
-    const newPhaseCount =
-      timerState.phase === 'focus'
-        ? timerState.phaseCount + 1
-        : timerState.phaseCount;
-    const nextPhase = getNextPhase(timerState.phase, newPhaseCount);
-    const nextDuration = getPhaseDuration(nextPhase, settings);
-
-    advancePhase(session.id, nextPhase, nextDuration, newPhaseCount);
-  }, [displaySeconds, session?.status, session?.timerState.phase, isHost]);
-
-  // ─── BackHandler — warn user for any ongoing session state ───────────────
+  // Partner joined — advance lights to "building" (lights 1→4)
   useEffect(() => {
-    if (!session || session.status === 'completed' || session.status === 'cancelled') return;
+    if (!session) return;
+    if (session.status === 'waiting' && session.participantId) {
+      setLightStage('building');
+    }
+  }, [session?.participantId]);
 
-    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
-      showLeaveAlert();
-      return true;
-    });
-    return () => sub.remove();
-  }, [session?.status]);
-
-  // ─── AppState — detect background ────────────────────────────��───────────────
-  const handleBackground = useCallback(() => {
-    if (!session || !user) return;
-    if (session.status !== 'active') return;
-    markSessionBroken(session.id, isHost);
-  }, [session?.id, session?.status, isHost, user?.uid]);
-
-  useAppState(handleBackground);
-
-  // ─── Session complete/cancelled routing ───────────────────────────��───────────
+  // ─── Session complete / cancelled routing ────────────────────────────────────
   useEffect(() => {
     if (!session || !user) return;
-    if (session.status === 'completed') {
-      handleSessionEnd(false);
+    if (session.status === 'completed' && prevStatusRef.current !== 'completed') {
+      setShowCheckeredFlag(true);
     } else if (session.status === 'cancelled') {
       router.replace('/(app)');
     }
   }, [session?.status]);
 
-  async function handleSessionEnd(broken: boolean) {
+  // ─── Haptic + toast for BOTH users when a focus phase completes ──────────────
+  useEffect(() => {
+    if (!session) return;
+    const count = session.timerState.phaseCount;
+    if (count > prevPhaseCountRef.current) {
+      prevPhaseCountRef.current = count;
+      if (session.timerState.phase !== 'focus') {
+        setPointsToast(phasePts);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
+    }
+  }, [session?.timerState.phaseCount, session?.timerState.phase]);
+
+  // ─── Host: auto-advance phase when timer hits 0 ───────────────────────────────
+  useEffect(() => {
+    if (!session || !isHost) return;
+    if (session.status !== 'active') return;
+    if (displaySeconds > 0) { phaseAdvancedRef.current = false; return; }
+    if (phaseAdvancedRef.current) return;
+    phaseAdvancedRef.current = true;
+
+    const { timerState, settings } = session;
+    const newCount = timerState.phase === 'focus' ? timerState.phaseCount + 1 : timerState.phaseCount;
+    const nextPhase = getNextPhase(timerState.phase, newCount);
+    advancePhase(session.id, nextPhase, getPhaseDuration(nextPhase, settings), newCount);
+  }, [displaySeconds, session?.status, session?.timerState.phase, isHost]);
+
+  // ─── Session end handler ─────────────────────────────────────────────────────
+  async function handleSessionEnd() {
     if (!session || !user) return;
+    const total = sessionPhasePoints + completionBonus();
     try {
-      await saveSessionHistory(session, user.uid);
+      await saveSessionHistory(session, user.uid, total);
       if (session.timerState.phaseCount > 0) {
-        const focusMin = Math.round(
-          (session.timerState.phaseCount * session.settings.focusDuration) / 60
-        );
-        await recordSessionCompletion(user.uid, focusMin);
+        const focusMin = Math.round((session.timerState.phaseCount * session.settings.focusDuration) / 60);
+        await recordSessionCompletion(user.uid, focusMin, total);
       }
     } finally {
       router.replace('/(app)');
     }
   }
 
-  function showLeaveAlert() {
-    Alert.alert(
-      'Leave Session?',
-      session?.status === 'active'
-        ? 'Leaving will mark your focus as broken for both you and your partner.'
-        : 'Are you sure you want to leave this session?',
-      [
-        { text: 'Stay', style: 'cancel' },
-        {
-          text: 'Leave',
-          style: 'destructive',
-          onPress: async () => {
-            if (!session || !user) return;
-            if (session.status === 'active') {
-              await markSessionBroken(session.id, isHost);
-            } else if (session.status === 'waiting' && isHost) {
-              await cancelSession(session.id);
-            }
-            router.replace('/(app)');
-          },
-        },
-      ]
-    );
-  }
+  // ─── Back handler ─────────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!session || session.status === 'completed' || session.status === 'cancelled') return;
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => { showRetireAlert(); return true; });
+    return () => sub.remove();
+  }, [session?.status]);
 
-  // ─── Control handlers ─────────────────────────────���───────────────────────────
+  // ─── Grace period: 10s background → leave ────────────────────────────────────
+  const handleGraceExpired = useCallback(() => {
+    if (!session || !user) return;
+    if (session.status !== 'active') return;
+    leaveSession(session.id, user.uid, isHost);
+    setPointsToast(POINTS_LEAVE_PENALTY);
+  }, [session?.id, session?.status, isHost, user?.uid]);
 
+  useGracePeriod(session?.status === 'active', handleGraceExpired);
+
+  // ─── Controls ────────────────────────────────────────────────────────────────
   async function handleStart() {
     if (!session || !isHost) return;
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    await startSession(session.id, session.settings);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+    setLightStage('go');
+    const sessionId = session.id;
+    const settings = session.settings;
+    setTimeout(() => startSession(sessionId, settings), 600);
   }
 
   async function handlePause() {
     if (!session || !isHost) return;
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     await pauseSession(session.id, displaySeconds);
   }
 
   async function handleResume() {
     if (!session || !isHost) return;
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     await resumeSession(session.id, displaySeconds);
   }
 
   async function handleEnd() {
     if (!session || !isHost) return;
     Alert.alert(
-      'End Session',
-      'Mark this session as complete?',
+      'Finish Race?',
+      isSolo ? 'End your solo practice and bank your points?' : 'This will end the session for both drivers.',
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: 'Keep Going', style: 'cancel' },
+        { text: 'Finish', onPress: () => endSession(session.id) },
+      ]
+    );
+  }
+
+  function showRetireAlert() {
+    if (!session || !user) return;
+    const isActive = ['active', 'paused', 'solo'].includes(session.status);
+    const body = !isActive
+      ? 'Leave this session?'
+      : isSolo
+      ? `Retiring ends your solo practice and costs ${Math.abs(POINTS_LEAVE_PENALTY)} points.`
+      : `Retiring costs you ${Math.abs(POINTS_LEAVE_PENALTY)} championship points.\nYour teammate will keep racing.`;
+    Alert.alert(
+      'Retire from Race?',
+      body,
+      [
+        { text: 'Stay in Race', style: 'cancel' },
         {
-          text: 'End Session',
-          onPress: () => endSession(session.id),
+          text: `Retire (${POINTS_LEAVE_PENALTY} PTS)`,
+          style: 'destructive',
+          onPress: async () => {
+            if (session.status === 'waiting' && isHost) {
+              await cancelSession(session.id);
+            } else {
+              await leaveSession(session.id, user.uid, isHost);
+              setPointsToast(POINTS_LEAVE_PENALTY);
+            }
+            router.replace('/(app)');
+          },
         },
       ]
     );
@@ -185,12 +263,11 @@ export default function SessionScreen() {
   }
 
   // ─── Loading / not found ──────────────────────────────────────────────────────
-
   if (loading) {
     return (
       <SafeAreaView style={styles.safe}>
         <View style={styles.center}>
-          <Text style={styles.loadingText}>Loading session...</Text>
+          <Text style={styles.infoText}>Loading session...</Text>
         </View>
       </SafeAreaView>
     );
@@ -200,222 +277,354 @@ export default function SessionScreen() {
     return (
       <SafeAreaView style={styles.safe}>
         <View style={styles.center}>
-          <Text style={styles.loadingText}>Session not found.</Text>
-          <Button label="Go Home" onPress={() => router.replace('/(app)')} />
+          <Text style={styles.infoText}>Session not found.</Text>
+          <Button label="Return to Paddock" onPress={() => router.replace('/(app)')} />
         </View>
       </SafeAreaView>
     );
   }
 
   const { timerState, status, joinCode } = session;
-  const isActive = status === 'active';
+  const isActive = status === 'active' || status === 'solo';
   const isPaused = status === 'paused';
   const isWaiting = status === 'waiting';
-
-  // ─── Broken state overlay ─────────────────��──────────────────────────────���────
-
-  if (session.isBroken) {
-    return (
-      <SafeAreaView style={[styles.safe, styles.brokenBg]}>
-        <View style={styles.brokenContainer}>
-          <Text style={styles.brokenEmoji}>💔</Text>
-          <Text style={styles.brokenTitle}>Focus Broken</Text>
-          <Text style={styles.brokenSub}>
-            {myFocusBroken
-              ? 'You left the app during the session.'
-              : `${partnerName ?? 'Your partner'} left the session.`}
-          </Text>
-          <View style={styles.brokenMeta}>
-            <Text style={styles.brokenMetaText}>
-              {timerState.phaseCount} phase{timerState.phaseCount !== 1 ? 's' : ''} completed
-            </Text>
-          </View>
-          <Button
-            label="Go Home"
-            onPress={() => handleSessionEnd(true)}
-            style={styles.brokenBtn}
-          />
-        </View>
-      </SafeAreaView>
-    );
-  }
-
-  // ─── Main session UI ─────────────────────────────��────────────────────────���───
+  const myState = getMyState();
+  const partnerState = getPartnerState();
 
   return (
     <SafeAreaView style={styles.safe}>
-      <ScrollView
-        contentContainerStyle={styles.container}
-        scrollEnabled={false}
-      >
-        {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity onPress={showLeaveAlert}>
-            <Text style={styles.leaveText}>Leave</Text>
+      {/* Overlays */}
+      {showCheckeredFlag && (
+        <CheckeredFlag
+          pointsEarned={sessionPhasePoints + completionBonus()}
+          onDismiss={handleSessionEnd}
+        />
+      )}
+      {pointsToast !== null && (
+        <PointsToast delta={pointsToast} onDone={() => setPointsToast(null)} />
+      )}
+
+      <View style={styles.container}>
+
+        {/* ── Top bar ── */}
+        <View style={styles.topBar}>
+          <Image source={F1Assets.logo} style={styles.f1Logo} resizeMode="contain" />
+          {(isActive || isPaused) && <PhaseIndicator phaseCount={timerState.phaseCount} />}
+          <TouchableOpacity onPress={showRetireAlert} style={styles.retireBtn}>
+            <Text style={styles.retireText}>RETIRE</Text>
           </TouchableOpacity>
-          <PhaseIndicator phaseCount={timerState.phaseCount} />
         </View>
 
-        {/* Join code (while waiting) */}
+        {/* ── Start Lights (waiting state) ── */}
         {isWaiting && (
-          <TouchableOpacity style={styles.codeRow} onPress={handleCopyCode}>
-            <View style={styles.codeBadge}>
-              <Text style={styles.codeLabel}>Join Code</Text>
-              <Text style={styles.codeValue}>{joinCode}</Text>
-              <Text style={styles.codeTap}>Tap to copy</Text>
+          <View style={styles.lightsWrapper}>
+            <GridStartLights
+              stage={lightStage}
+              onGoComplete={() => setLightStage('racing')}
+            />
+            <Text style={styles.lightsStatus}>
+              {isSolo
+                ? 'SOLO LAP — START WHEN READY'
+                : !partnerConnected
+                ? 'DRIVERS FORMING UP ON THE GRID...'
+                : 'ALL DRIVERS READY — LIGHTS OUT!'}
+            </Text>
+          </View>
+        )}
+
+        {/* ── Points strip (active/paused) ── */}
+        {(isActive || isPaused) && (
+          <View style={styles.pointsStrip}>
+            <Text style={styles.pointsStripText}>
+              +{sessionPhasePoints} {isSolo ? 'PRACTICE' : 'CHAMPIONSHIP'} PTS THIS RACE
+            </Text>
+            <Text style={[styles.phaseTag, { color: timerState.phase === 'focus' ? Colors.focusAccent : Colors.shortBreakAccent }]}>
+              {PHASE_LABELS[timerState.phase]}
+            </Text>
+          </View>
+        )}
+
+        {/* ── Driver avatars — the main visual ── */}
+        {isSolo ? (
+          <View style={styles.soloRow}>
+            <AvatarDisplay
+              avatarId={profile?.avatarId}
+              state={myState}
+              size={isWaiting ? 140 : 110}
+              animate
+            />
+            <Text style={styles.driverLabel}>{profile?.displayName?.toUpperCase() ?? 'YOU'}</Text>
+            <Text style={[styles.driverStatus, { color: myStateColor(myState) }]}>
+              {myStateLabel(myState, iHaveLeft)}
+            </Text>
+          </View>
+        ) : (
+          <>
+            <View style={styles.driversRow}>
+              {/* My driver */}
+              <View style={styles.driverCard}>
+                <AvatarDisplay avatarId={profile?.avatarId} state={myState} size={isWaiting ? 100 : 80} animate />
+                <Text style={styles.driverLabel}>YOU</Text>
+                <Text style={[styles.driverStatus, { color: myStateColor(myState) }]}>
+                  {myStateLabel(myState, iHaveLeft)}
+                </Text>
+              </View>
+
+              {/* Teammate divider — partnership, not rivalry */}
+              <View style={styles.vsDivider}>
+                {isActive ? (
+                  <Image source={F1Assets.checkedFlag} style={styles.vsFlag} resizeMode="contain" />
+                ) : null}
+                <Text style={styles.vsText}>&amp;</Text>
+              </View>
+
+              {/* Teammate */}
+              <View style={styles.driverCard}>
+                {partnerConnected ? (
+                  <AvatarDisplay avatarId={partnerAvatarId} state={partnerState} size={isWaiting ? 100 : 80} animate />
+                ) : (
+                  <View style={[styles.emptySlot, { width: isWaiting ? 100 : 80, height: isWaiting ? 100 : 80 }]}>
+                    <Text style={styles.emptySlotText}>?</Text>
+                  </View>
+                )}
+                <Text style={styles.driverLabel}>{partnerName?.toUpperCase() ?? 'WAITING'}</Text>
+                <Text style={[styles.driverStatus, { color: partnerStateColor(partnerState, partnerConnected) }]}>
+                  {partnerConnected ? partnerStateLabel(partnerState, partnerHasLeft) : 'NOT ON GRID'}
+                </Text>
+              </View>
             </View>
+            {(isActive || isPaused) && (
+              <Text style={styles.teammateCaption}>RACING TOGETHER</Text>
+            )}
+          </>
+        )}
+
+        {/* ── Join code (duo, waiting, no partner yet) ── */}
+        {isWaiting && !partnerConnected && !isSolo && (
+          <TouchableOpacity style={styles.codeBox} onPress={handleCopyCode} activeOpacity={0.7}>
+            <Text style={styles.codeHint}>YOUR PIT PASS — TAP TO COPY</Text>
+            <Text style={styles.codeValue}>{joinCode}</Text>
           </TouchableOpacity>
         )}
 
-        {/* Partner status */}
-        <PartnerStatus
-          displayName={partnerName ?? null}
-          isConnected={partnerConnected}
-          focusBroken={!!partnerFocusBroken}
-        />
-
-        {/* Timer */}
-        <View style={styles.timerWrapper}>
-          {isWaiting ? (
-            <View style={styles.waitingContainer}>
-              <Text style={styles.waitingEmoji}>⏳</Text>
-              <Text style={styles.waitingText}>
-                {partnerConnected
-                  ? 'Partner joined! Ready to start.'
-                  : 'Waiting for partner to join...'}
-              </Text>
-            </View>
-          ) : (
+        {/* ── Timer (active / paused) ── */}
+        {(isActive || isPaused) && (
+          <View style={styles.timerWrapper}>
             <TimerDisplay
               seconds={displaySeconds}
               phase={timerState.phase}
               isRunning={timerState.isRunning}
             />
-          )}
-        </View>
+          </View>
+        )}
 
-        {/* Controls */}
+        {/* ── Controls ── */}
         <View style={styles.controls}>
           {isHost ? (
             <>
-              {isWaiting && partnerConnected && (
-                <Button label="Start Session" onPress={handleStart} size="lg" />
-              )}
-              {isWaiting && !partnerConnected && (
+              {isWaiting && (isSolo || partnerConnected) && (
                 <Button
-                  label="Waiting for partner..."
-                  onPress={() => {}}
+                  label={isSolo ? 'LIGHTS OUT — START SOLO LAP' : 'LIGHTS OUT — START RACE'}
+                  onPress={handleStart}
                   size="lg"
-                  disabled
                 />
+              )}
+              {isWaiting && !isSolo && !partnerConnected && (
+                <Button label="WAITING FOR DRIVER..." onPress={() => {}} size="lg" disabled />
               )}
               {isActive && (
                 <View style={styles.controlRow}>
-                  <Button
-                    label="Pause"
-                    onPress={handlePause}
-                    variant="secondary"
-                    size="md"
-                    style={styles.controlBtn}
-                  />
-                  <Button
-                    label="End Session"
-                    onPress={handleEnd}
-                    variant="ghost"
-                    size="md"
-                    style={styles.controlBtn}
-                  />
+                  <Button label="YELLOW FLAG" onPress={handlePause} variant="secondary" size="md" style={styles.halfBtn} />
+                  <Button label={isSolo ? 'FINISH' : 'RETIRE'} onPress={handleEnd} variant="ghost" size="md" style={styles.halfBtn} />
                 </View>
               )}
               {isPaused && (
                 <View style={styles.controlRow}>
-                  <Button
-                    label="Resume"
-                    onPress={handleResume}
-                    size="md"
-                    style={styles.controlBtn}
-                  />
-                  <Button
-                    label="End Session"
-                    onPress={handleEnd}
-                    variant="ghost"
-                    size="md"
-                    style={styles.controlBtn}
-                  />
+                  <Button label="GREEN FLAG" onPress={handleResume} size="md" style={styles.halfBtn} />
+                  <Button label={isSolo ? 'FINISH' : 'RETIRE'} onPress={handleEnd} variant="ghost" size="md" style={styles.halfBtn} />
                 </View>
               )}
             </>
           ) : (
-            <View style={styles.guestInfo}>
+            <View style={styles.guestBanner}>
               <Text style={styles.guestText}>
-                {isWaiting
-                  ? 'Waiting for the host to start...'
-                  : isActive
-                  ? 'Session in progress'
-                  : isPaused
-                  ? 'Session paused by host'
+                {isWaiting && !partnerConnected ? 'Waiting for the host...'
+                  : isWaiting ? 'Host will start the race'
+                  : isActive ? 'Race in progress — stay focused!'
+                  : isPaused ? 'YELLOW FLAG — Race paused by host'
                   : ''}
               </Text>
             </View>
           )}
         </View>
-      </ScrollView>
+      </View>
     </SafeAreaView>
   );
 }
 
+// ─── Avatar status helpers ───────────────────────────────────────────────────
+
+function myStateColor(state: DriverState): string {
+  if (state === 'focus') return Colors.focusAccent;
+  if (state === 'happy') return Colors.success;
+  if (state === 'sad') return Colors.error;
+  return Colors.textMuted;
+}
+
+function partnerStateColor(state: DriverState, connected: boolean): string {
+  if (!connected) return Colors.textMuted;
+  return myStateColor(state);
+}
+
+function myStateLabel(state: DriverState, hasLeft: boolean): string {
+  if (hasLeft) return 'RETIRED';
+  if (state === 'focus') return 'ON RACE LAP';
+  if (state === 'happy') return 'IN PIT STOP';
+  if (state === 'sad') return 'FOCUS BROKEN';
+  return 'ON GRID';
+}
+
+function partnerStateLabel(state: DriverState, hasLeft: boolean): string {
+  if (hasLeft) return 'RETIRED';
+  if (state === 'focus') return 'ON RACE LAP';
+  if (state === 'happy') return 'IN PIT STOP';
+  if (state === 'sad') return 'FOCUS BROKEN';
+  return 'READY';
+}
+
+// ─── Styles ──────────────────────────────────────────────────────────────────
+
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: Colors.background },
-  center: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: Spacing.lg,
-    padding: Spacing.xl,
-  },
-  loadingText: { fontSize: FontSize.lg, color: Colors.textSecondary },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: Spacing.lg, padding: Spacing.xl },
+  infoText: { fontSize: FontSize.lg, color: Colors.textSecondary },
   container: {
     flex: 1,
     paddingHorizontal: Spacing.xl,
-    paddingTop: Spacing.md,
-    paddingBottom: Spacing.xl,
-    gap: Spacing.lg,
+    paddingTop: Spacing.sm,
+    paddingBottom: Spacing.lg,
+    gap: Spacing.md,
   },
 
-  // Header
-  header: {
+  // Top bar
+  topBar: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  leaveText: {
-    fontSize: FontSize.md,
-    color: Colors.error,
-    fontWeight: FontWeight.medium,
+  f1Logo: { width: 60, height: 22 },
+  retireBtn: {
+    borderWidth: 1,
+    borderColor: Colors.primary,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 4,
+    borderRadius: Radius.sm,
+  },
+  retireText: {
+    fontSize: FontSize.xs,
+    color: Colors.primary,
+    fontWeight: FontWeight.black,
+    letterSpacing: 1,
+  },
+
+  // Start lights section
+  lightsWrapper: { alignItems: 'center', gap: Spacing.sm },
+  lightsStatus: {
+    fontSize: FontSize.xs,
+    color: Colors.textMuted,
+    fontWeight: FontWeight.black,
+    letterSpacing: 2,
+    textAlign: 'center',
+  },
+
+  // Points strip
+  pointsStrip: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: Colors.surfaceElevated,
+    borderRadius: Radius.sm,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.xs,
+  },
+  pointsStripText: {
+    fontSize: FontSize.xs,
+    color: Colors.gold,
+    fontWeight: FontWeight.black,
+    letterSpacing: 1,
+  },
+  phaseTag: {
+    fontSize: FontSize.xs,
+    fontWeight: FontWeight.black,
+    letterSpacing: 1,
+  },
+
+  // Drivers row — main visual
+  driversRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-around',
+    paddingVertical: Spacing.sm,
+  },
+  soloRow: { alignItems: 'center', gap: Spacing.sm, paddingVertical: Spacing.md },
+  teammateCaption: {
+    textAlign: 'center',
+    fontSize: 10,
+    fontWeight: FontWeight.black,
+    color: Colors.textMuted,
+    letterSpacing: 3,
+    marginTop: -Spacing.xs,
+  },
+  driverCard: { alignItems: 'center', gap: Spacing.xs, flex: 1 },
+  driverLabel: {
+    fontSize: FontSize.xs,
+    color: Colors.textSecondary,
+    fontWeight: FontWeight.black,
+    letterSpacing: 2,
+  },
+  driverStatus: {
+    fontSize: 10,
+    fontWeight: FontWeight.bold,
+    letterSpacing: 0.5,
+  },
+  emptySlot: {
+    borderRadius: 999,
+    backgroundColor: Colors.surfaceElevated,
+    borderWidth: 2,
+    borderColor: Colors.border,
+    borderStyle: 'dashed',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptySlotText: { fontSize: FontSize.xxl, color: Colors.textMuted },
+
+  // VS divider
+  vsDivider: { alignItems: 'center', gap: 4, paddingHorizontal: Spacing.sm },
+  vsFlag: { width: 20, height: 14 },
+  vsText: {
+    fontSize: FontSize.sm,
+    fontWeight: FontWeight.black,
+    color: Colors.textMuted,
+    letterSpacing: 3,
   },
 
   // Join code
-  codeRow: { alignItems: 'center' },
-  codeBadge: {
-    backgroundColor: Colors.primaryDark,
+  codeBox: {
+    alignItems: 'center',
+    backgroundColor: Colors.surface,
     borderRadius: Radius.md,
     paddingVertical: Spacing.md,
-    paddingHorizontal: Spacing.xl,
-    alignItems: 'center',
-    gap: 2,
+    borderWidth: 2,
+    borderColor: Colors.primary,
+    gap: 4,
   },
-  codeLabel: {
-    fontSize: FontSize.xs,
-    color: 'rgba(255,255,255,0.6)',
-    letterSpacing: 0.5,
-  },
+  codeHint: { fontSize: FontSize.xs, color: Colors.textMuted, letterSpacing: 1 },
   codeValue: {
     fontSize: FontSize.xxxl,
-    fontWeight: FontWeight.bold,
-    color: Colors.textOnPrimary,
+    fontWeight: FontWeight.black,
+    color: Colors.primary,
     letterSpacing: 8,
   },
-  codeTap: { fontSize: FontSize.xs, color: 'rgba(255,255,255,0.4)' },
 
   // Timer
   timerWrapper: {
@@ -423,55 +632,22 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  waitingContainer: { alignItems: 'center', gap: Spacing.md },
-  waitingEmoji: { fontSize: 64 },
-  waitingText: {
-    fontSize: FontSize.lg,
-    color: Colors.textSecondary,
-    textAlign: 'center',
-  },
 
   // Controls
   controls: { gap: Spacing.sm },
   controlRow: { flexDirection: 'row', gap: Spacing.sm },
-  controlBtn: { flex: 1 },
-  guestInfo: {
+  halfBtn: { flex: 1 },
+  guestBanner: {
+    backgroundColor: Colors.surfaceElevated,
+    borderRadius: Radius.md,
     paddingVertical: Spacing.md,
     alignItems: 'center',
   },
   guestText: {
     fontSize: FontSize.md,
     color: Colors.textSecondary,
-  },
-
-  // Broken state
-  brokenBg: { backgroundColor: Colors.brokenBg },
-  brokenContainer: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: Spacing.xl,
-    gap: Spacing.md,
-  },
-  brokenEmoji: { fontSize: 72 },
-  brokenTitle: {
-    fontSize: FontSize.xxl,
-    fontWeight: FontWeight.bold,
-    color: Colors.brokenAccent,
-  },
-  brokenSub: {
-    fontSize: FontSize.md,
-    color: Colors.textSecondary,
+    fontWeight: FontWeight.medium,
+    letterSpacing: 0.5,
     textAlign: 'center',
-    lineHeight: 22,
   },
-  brokenMeta: {
-    backgroundColor: Colors.surface,
-    borderRadius: Radius.md,
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.sm,
-    marginTop: Spacing.sm,
-  },
-  brokenMetaText: { fontSize: FontSize.md, color: Colors.textSecondary },
-  brokenBtn: { marginTop: Spacing.md, width: '100%' },
 });

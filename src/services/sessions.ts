@@ -8,24 +8,44 @@ import {
   where,
   getDocs,
   onSnapshot,
-  orderBy,
   serverTimestamp,
   Timestamp,
   Unsubscribe,
-  deleteDoc,
   addDoc,
+  arrayUnion,
+  arrayRemove,
 } from 'firebase/firestore';
 import { db } from './firebase';
-import { Session, SessionInvite, SessionSettings, TimerState, PomodoroPhase } from '@/types';
+import { Session, SessionInvite, SessionMode, SessionSettings, TimerState, PomodoroPhase } from '@/types';
+import { DriverId, DEFAULT_DRIVER } from '@/constants/drivers';
 import { DEFAULT_SESSION_SETTINGS } from '@/constants/pomodoro';
 import { generateJoinCode } from '@/utils/code';
+import { addPoints } from './users';
+import { sendPush } from './notifications';
+
+// ─── Points constants ─────────────────────────────────────────────────────────
+// Duo (racing with a partner) — full rewards
+export const POINTS_PER_PHASE = 10;          // per focus lap, duo
+export const POINTS_FULL_COMPLETE = 50;      // both drivers finished together
+export const POINTS_PARTNER_LEFT_BONUS = 25; // partner retired, you finished solo
+// Solo practice — reduced rewards (no accountability partner)
+export const POINTS_SOLO_PHASE = 5;          // per focus lap, solo
+export const POINTS_SOLO_BONUS = 15;         // solo practice finished
+// Shared
+export const POINTS_LEAVE_PENALTY = -20;
+
+export function phasePointsFor(mode: SessionMode): number {
+  return mode === 'solo' ? POINTS_SOLO_PHASE : POINTS_PER_PHASE;
+}
 
 // ─── Create / Join ─────────────────────────────────────────────────────────────
 
 export async function createSession(
   hostId: string,
   hostDisplayName: string,
-  settings: SessionSettings = DEFAULT_SESSION_SETTINGS
+  hostAvatarId: DriverId = DEFAULT_DRIVER,
+  settings: SessionSettings = DEFAULT_SESSION_SETTINGS,
+  mode: SessionMode = 'duo'
 ): Promise<{ sessionId: string; joinCode: string }> {
   const joinCode = generateJoinCode();
   const sessionRef = doc(collection(db, 'sessions'));
@@ -40,17 +60,23 @@ export async function createSession(
   };
 
   const session: Omit<Session, 'id'> = {
+    mode,
     hostId,
     hostDisplayName,
+    hostAvatarId,
     participantId: null,
     participantDisplayName: null,
+    participantAvatarId: null,
     status: 'waiting',
     joinCode: joinCode.toUpperCase(),
     timerState,
     settings,
+    leftParticipants: [],
     isBroken: false,
     hostFocusBroken: false,
     participantFocusBroken: false,
+    hostPointsEarned: 0,
+    participantPointsEarned: 0,
     createdAt: serverTimestamp() as any,
     startedAt: null,
     completedAt: null,
@@ -63,7 +89,8 @@ export async function createSession(
 export async function joinSessionByCode(
   joinCode: string,
   participantId: string,
-  participantDisplayName: string
+  participantDisplayName: string,
+  participantAvatarId: DriverId = DEFAULT_DRIVER
 ): Promise<{ success: boolean; sessionId?: string; error?: string }> {
   const q = query(
     collection(db, 'sessions'),
@@ -79,6 +106,10 @@ export async function joinSessionByCode(
   const sessionDoc = snap.docs[0];
   const session = sessionDoc.data() as Session;
 
+  if (session.mode === 'solo') {
+    return { success: false, error: 'That is a solo practice session.' };
+  }
+
   if (session.hostId === participantId) {
     return { success: false, error: 'You are the host of this session.' };
   }
@@ -90,55 +121,15 @@ export async function joinSessionByCode(
   await updateDoc(sessionDoc.ref, {
     participantId,
     participantDisplayName,
-    status: 'waiting',
+    participantAvatarId,
+  });
+
+  // Notify the host that their partner joined
+  sendPush(session.hostId, 'partner_joined', participantDisplayName, {
+    sessionId: sessionDoc.id,
   });
 
   return { success: true, sessionId: sessionDoc.id };
-}
-
-export async function sendSessionInvite(
-  sessionId: string,
-  joinCode: string,
-  fromUid: string,
-  fromDisplayName: string,
-  toUid: string
-): Promise<void> {
-  const inviteRef = doc(collection(db, 'sessionInvites'));
-  await setDoc(inviteRef, {
-    sessionId,
-    joinCode,
-    fromUid,
-    fromDisplayName,
-    toUid,
-    status: 'pending',
-    createdAt: serverTimestamp(),
-  });
-}
-
-export function subscribeToSessionInvites(
-  toUid: string,
-  callback: (invites: SessionInvite[]) => void
-) {
-  const q = query(
-    collection(db, 'sessionInvites'),
-    where('toUid', '==', toUid),
-    where('status', '==', 'pending'),
-    orderBy('createdAt', 'desc')
-  );
-
-  return onSnapshot(q, (snap) => {
-    const invites = snap.docs.map((doc) => ({ id: doc.id, ...doc.data() } as SessionInvite));
-    callback(invites);
-  });
-}
-
-export async function respondToSessionInvite(
-  inviteId: string,
-  status: 'accepted' | 'declined'
-): Promise<void> {
-  await updateDoc(doc(db, 'sessionInvites', inviteId), {
-    status,
-  });
 }
 
 export async function getSession(sessionId: string): Promise<Session | null> {
@@ -147,14 +138,41 @@ export async function getSession(sessionId: string): Promise<Session | null> {
   return { id: snap.id, ...snap.data() } as Session;
 }
 
+export async function getActiveSessionForUser(uid: string): Promise<Session | null> {
+  const activeStatuses = ['waiting', 'active', 'paused', 'solo'];
+
+  // Check as host
+  const hostQuery = query(
+    collection(db, 'sessions'),
+    where('hostId', '==', uid),
+    where('status', 'in', activeStatuses)
+  );
+  const hostSnap = await getDocs(hostQuery);
+  if (!hostSnap.empty) {
+    const d = hostSnap.docs[0];
+    return { id: d.id, ...d.data() } as Session;
+  }
+
+  // Check as participant
+  const partQuery = query(
+    collection(db, 'sessions'),
+    where('participantId', '==', uid),
+    where('status', 'in', activeStatuses)
+  );
+  const partSnap = await getDocs(partQuery);
+  if (!partSnap.empty) {
+    const d = partSnap.docs[0];
+    return { id: d.id, ...d.data() } as Session;
+  }
+
+  return null;
+}
+
 // ─── Timer Controls ───────────────────────────────────────────────────────────
 
 export async function startSession(sessionId: string, settings: SessionSettings): Promise<void> {
   const now = Timestamp.now();
-  const endsAt = new Timestamp(
-    now.seconds + settings.focusDuration,
-    now.nanoseconds
-  );
+  const endsAt = new Timestamp(now.seconds + settings.focusDuration, now.nanoseconds);
 
   await updateDoc(doc(db, 'sessions', sessionId), {
     status: 'active',
@@ -165,10 +183,7 @@ export async function startSession(sessionId: string, settings: SessionSettings)
   });
 }
 
-export async function pauseSession(
-  sessionId: string,
-  timeRemaining: number
-): Promise<void> {
+export async function pauseSession(sessionId: string, timeRemaining: number): Promise<void> {
   await updateDoc(doc(db, 'sessions', sessionId), {
     status: 'paused',
     'timerState.isRunning': false,
@@ -178,15 +193,9 @@ export async function pauseSession(
   });
 }
 
-export async function resumeSession(
-  sessionId: string,
-  timeRemaining: number
-): Promise<void> {
+export async function resumeSession(sessionId: string, timeRemaining: number): Promise<void> {
   const now = Timestamp.now();
-  const endsAt = new Timestamp(
-    now.seconds + timeRemaining,
-    now.nanoseconds
-  );
+  const endsAt = new Timestamp(now.seconds + timeRemaining, now.nanoseconds);
 
   await updateDoc(doc(db, 'sessions', sessionId), {
     status: 'active',
@@ -203,10 +212,7 @@ export async function advancePhase(
   newPhaseCount: number
 ): Promise<void> {
   const now = Timestamp.now();
-  const endsAt = new Timestamp(
-    now.seconds + nextPhaseDuration,
-    now.nanoseconds
-  );
+  const endsAt = new Timestamp(now.seconds + nextPhaseDuration, now.nanoseconds);
 
   await updateDoc(doc(db, 'sessions', sessionId), {
     'timerState.phase': nextPhase,
@@ -227,17 +233,65 @@ export async function endSession(sessionId: string): Promise<void> {
   });
 }
 
-export async function markSessionBroken(
+// ─── Leave / Rejoin ───────────────────────────────────────────────────────────
+
+export async function leaveSession(
   sessionId: string,
-  byHost: boolean
+  uid: string,
+  isHost: boolean
 ): Promise<void> {
-  const field = byHost ? 'hostFocusBroken' : 'participantFocusBroken';
-  await updateDoc(doc(db, 'sessions', sessionId), {
-    [field]: true,
-    isBroken: true,
-    'timerState.isRunning': false,
-    'timerState.endsAt': null,
-  });
+  const sessionRef = doc(db, 'sessions', sessionId);
+  const snap = await getDoc(sessionRef);
+  if (!snap.exists()) return;
+
+  const session = snap.data() as Session;
+  const otherUid = isHost ? session.participantId : session.hostId;
+  const alreadyLeft = session.leftParticipants ?? [];
+  const leaverName = isHost ? session.hostDisplayName : (session.participantDisplayName ?? 'Your partner');
+
+  // Penalty points
+  await addPoints(uid, POINTS_LEAVE_PENALTY);
+
+  // If the other person already left, mark fully broken
+  if (otherUid === null || alreadyLeft.includes(otherUid)) {
+    await updateDoc(sessionRef, {
+      status: 'broken',
+      isBroken: true,
+      leftParticipants: arrayUnion(uid),
+      'timerState.isRunning': false,
+      'timerState.endsAt': null,
+    });
+  } else {
+    // Partner continues solo — timer keeps running
+    await updateDoc(sessionRef, {
+      status: 'solo',
+      leftParticipants: arrayUnion(uid),
+    });
+    // Notify the remaining driver
+    sendPush(otherUid, 'partner_retired', leaverName, { sessionId });
+  }
+}
+
+export async function rejoinSession(sessionId: string, uid: string): Promise<boolean> {
+  const sessionRef = doc(db, 'sessions', sessionId);
+  const snap = await getDoc(sessionRef);
+  if (!snap.exists()) return false;
+
+  const session = snap.data() as Session;
+  const validStatuses: string[] = ['solo', 'active', 'paused', 'waiting'];
+  if (!validStatuses.includes(session.status)) return false;
+
+  const updates: Record<string, any> = {
+    leftParticipants: arrayRemove(uid),
+  };
+
+  // If solo and this person is rejoining, go back to active/paused
+  if (session.status === 'solo') {
+    updates.status = session.timerState.isRunning ? 'active' : 'paused';
+  }
+
+  await updateDoc(sessionRef, updates);
+  return true;
 }
 
 export async function cancelSession(sessionId: string): Promise<void> {
@@ -247,11 +301,69 @@ export async function cancelSession(sessionId: string): Promise<void> {
   });
 }
 
-// ─── Session History ───────────────────────────────────────────────────────────
+export async function markSessionBroken(sessionId: string, byHost: boolean): Promise<void> {
+  const field = byHost ? 'hostFocusBroken' : 'participantFocusBroken';
+  await updateDoc(doc(db, 'sessions', sessionId), {
+    [field]: true,
+    isBroken: true,
+    'timerState.isRunning': false,
+    'timerState.endsAt': null,
+  });
+}
+
+// ─── Session Invites ──────────────────────────────────────────────────────────
+
+export async function sendSessionInvite(
+  sessionId: string,
+  joinCode: string,
+  fromUid: string,
+  fromDisplayName: string,
+  fromAvatarId: DriverId,
+  toUid: string
+): Promise<void> {
+  const ref = doc(collection(db, 'sessionInvites'));
+  await setDoc(ref, {
+    sessionId,
+    joinCode,
+    fromUid,
+    fromDisplayName,
+    fromAvatarId,
+    toUid,
+    status: 'pending',
+    createdAt: serverTimestamp(),
+  });
+  // Push recipient regardless of whether the app is open
+  sendPush(toUid, 'session_invite', fromDisplayName, { sessionId, joinCode });
+}
+
+export function subscribeToSessionInvites(
+  toUid: string,
+  callback: (invites: SessionInvite[]) => void
+): Unsubscribe {
+  const q = query(
+    collection(db, 'sessionInvites'),
+    where('toUid', '==', toUid),
+    where('status', '==', 'pending')
+  );
+  return onSnapshot(q, (snap) => {
+    const invites = snap.docs.map((d) => ({ id: d.id, ...d.data() } as SessionInvite));
+    callback(invites);
+  });
+}
+
+export async function respondToSessionInvite(
+  inviteId: string,
+  status: 'accepted' | 'declined'
+): Promise<void> {
+  await updateDoc(doc(db, 'sessionInvites', inviteId), { status });
+}
+
+// ─── History ──────────────────────────────────────────────────────────────────
 
 export async function saveSessionHistory(
   session: Session,
-  userId: string
+  userId: string,
+  totalPointsEarned: number = 0
 ): Promise<void> {
   const isHost = session.hostId === userId;
   const partnerId = isHost ? session.participantId : session.hostId;
@@ -263,6 +375,10 @@ export async function saveSessionHistory(
     session.timerState.phaseCount * session.settings.focusDuration;
   const focusMinutes = Math.round(focusSecondsCompleted / 60);
 
+  const pointsEarned = totalPointsEarned;
+  const pointsLost =
+    session.leftParticipants.includes(userId) ? Math.abs(POINTS_LEAVE_PENALTY) : 0;
+
   await addDoc(collection(db, 'sessionHistory'), {
     sessionId: session.id,
     userId,
@@ -272,6 +388,8 @@ export async function saveSessionHistory(
     phasesCompleted: session.timerState.phaseCount,
     wasCompleted: session.status === 'completed',
     wasBroken: session.isBroken,
+    pointsEarned,
+    pointsLost,
     createdAt: serverTimestamp(),
   });
 }

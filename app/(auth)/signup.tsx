@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -7,42 +7,29 @@ import {
   KeyboardAvoidingView,
   Platform,
   TouchableOpacity,
-  BackHandler,
-  Alert,
+  Image,
 } from 'react-native';
-import { useFocusEffect, useRouter } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { registerUser } from '@/services/auth';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
-import { Colors, Spacing, FontSize, FontWeight } from '@/constants/theme';
+import { AvatarSelector } from '@/components/avatar/AvatarSelector';
+import { Colors, Spacing, FontSize, FontWeight, Radius } from '@/constants/theme';
+import { DriverId, DEFAULT_DRIVER, F1Assets } from '@/constants/drivers';
+
+type Step = 'credentials' | 'avatar';
 
 export default function SignupScreen() {
   const router = useRouter();
+  const [step, setStep] = useState<Step>('credentials');
   const [displayName, setDisplayName] = useState('');
-
-  useFocusEffect(
-    useCallback(() => {
-      const sub = BackHandler.addEventListener('hardwareBackPress', () => {
-        Alert.alert(
-          'Exit App',
-          'Do you want to exit the app?',
-          [
-            { text: 'Cancel', style: 'cancel' },
-            { text: 'Exit', style: 'destructive', onPress: () => BackHandler.exitApp() },
-          ]
-        );
-        return true;
-      });
-
-      return () => sub.remove();
-    }, [])
-  );
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [avatarId, setAvatarId] = useState<DriverId>(DEFAULT_DRIVER);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  async function handleSignup() {
+  function handleNextStep() {
     if (!displayName.trim() || !email.trim() || !password) {
       setError('Please fill in all fields.');
       return;
@@ -52,11 +39,16 @@ export default function SignupScreen() {
       return;
     }
     setError('');
+    setStep('avatar');
+  }
+
+  async function handleSignup() {
     setLoading(true);
     try {
-      await registerUser(email.trim(), password, displayName.trim());
+      await registerUser(email.trim(), password, displayName.trim(), avatarId);
     } catch (e: any) {
       setError(friendlyAuthError(e.code));
+      setStep('credentials');
     } finally {
       setLoading(false);
     }
@@ -71,57 +63,84 @@ export default function SignupScreen() {
         contentContainerStyle={styles.container}
         keyboardShouldPersistTaps="handled"
       >
+        {/* Header */}
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-            <Text style={styles.backText}>← Back</Text>
-          </TouchableOpacity>
-          <Text style={styles.title}>Create account</Text>
-          <Text style={styles.subtitle}>Join and start studying together.</Text>
+          <Image source={F1Assets.logo} style={styles.logo} resizeMode="contain" />
+          <Text style={styles.title}>
+            {step === 'credentials' ? 'JOIN THE GRID' : 'PICK YOUR DRIVER'}
+          </Text>
+          <View style={styles.stepRow}>
+            <View style={[styles.stepDot, step === 'credentials' && styles.stepActive]} />
+            <View style={styles.stepLine} />
+            <View style={[styles.stepDot, step === 'avatar' && styles.stepActive]} />
+          </View>
         </View>
 
-        <View style={styles.form}>
-          <Input
-            label="Display Name"
-            value={displayName}
-            onChangeText={setDisplayName}
-            placeholder="How friends will see you"
-            autoCapitalize="words"
-            autoComplete="name"
-          />
-          <Input
-            label="Email"
-            value={email}
-            onChangeText={setEmail}
-            placeholder="you@example.com"
-            keyboardType="email-address"
-            autoCapitalize="none"
-            autoComplete="email"
-          />
-          <Input
-            label="Password"
-            value={password}
-            onChangeText={setPassword}
-            placeholder="At least 6 characters"
-            secureToggle
-          />
-          {error ? <Text style={styles.error}>{error}</Text> : null}
-
-          <Button
-            label="Create Account"
-            onPress={handleSignup}
-            loading={loading}
-            size="lg"
-            style={styles.submitBtn}
-          />
-        </View>
+        {step === 'credentials' ? (
+          <View style={styles.form}>
+            <Input
+              label="DRIVER NAME"
+              value={displayName}
+              onChangeText={setDisplayName}
+              placeholder="Your racing name"
+              autoCapitalize="words"
+            />
+            <Input
+              label="EMAIL"
+              value={email}
+              onChangeText={setEmail}
+              placeholder="driver@team.com"
+              keyboardType="email-address"
+              autoCapitalize="none"
+            />
+            <Input
+              label="PASSWORD"
+              value={password}
+              onChangeText={setPassword}
+              placeholder="At least 6 characters"
+              secureToggle
+            />
+            {error ? <Text style={styles.error}>{error}</Text> : null}
+            <Button
+              label="NEXT: CHOOSE DRIVER"
+              onPress={handleNextStep}
+              size="lg"
+              style={styles.submitBtn}
+            />
+          </View>
+        ) : (
+          <View style={styles.form}>
+            <Text style={styles.avatarHint}>
+              Your driver avatar will represent you in sessions and the leaderboard.
+            </Text>
+            <AvatarSelector selected={avatarId} onSelect={setAvatarId} />
+            {error ? <Text style={styles.error}>{error}</Text> : null}
+            <View style={styles.buttonRow}>
+              <Button
+                label="Back"
+                onPress={() => setStep('credentials')}
+                variant="ghost"
+                size="md"
+                style={styles.backBtn}
+              />
+              <Button
+                label="START RACING"
+                onPress={handleSignup}
+                loading={loading}
+                size="md"
+                style={styles.submitBtn}
+              />
+            </View>
+          </View>
+        )}
 
         <TouchableOpacity
           onPress={() => router.replace('/(auth)/login')}
           style={styles.switchLink}
         >
           <Text style={styles.switchText}>
-            Already have an account?{' '}
-            <Text style={styles.switchBold}>Sign in</Text>
+            Already racing?{' '}
+            <Text style={styles.switchBold}>Sign In</Text>
           </Text>
         </TouchableOpacity>
       </ScrollView>
@@ -132,13 +151,11 @@ export default function SignupScreen() {
 function friendlyAuthError(code: string): string {
   switch (code) {
     case 'auth/email-already-in-use':
-      return 'An account with this email already exists.';
+      return 'This email is already in use.';
     case 'auth/invalid-email':
-      return 'Please enter a valid email address.';
+      return 'Invalid email address.';
     case 'auth/weak-password':
       return 'Password must be at least 6 characters.';
-    case 'auth/network-request-failed':
-      return 'Network error. Check your connection.';
     default:
       return 'Something went wrong. Please try again.';
   }
@@ -151,39 +168,47 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.xl,
     paddingTop: Spacing.xxl,
     paddingBottom: Spacing.xxl,
-    justifyContent: 'center',
-    gap: Spacing.xl,
+    gap: Spacing.lg,
   },
-  header: { gap: Spacing.sm },
-  backBtn: { marginBottom: Spacing.sm },
-  backText: {
-    fontSize: FontSize.md,
-    color: Colors.primary,
-    fontWeight: FontWeight.medium,
-  },
+  header: { alignItems: 'center', gap: Spacing.sm },
+  logo: { width: 100, height: 34 },
   title: {
-    fontSize: FontSize.xxl,
-    fontWeight: FontWeight.bold,
+    fontSize: FontSize.xl,
+    fontWeight: FontWeight.black,
     color: Colors.textPrimary,
+    letterSpacing: 4,
   },
-  subtitle: {
-    fontSize: FontSize.md,
-    color: Colors.textSecondary,
+  stepRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+    marginTop: Spacing.xs,
   },
+  stepDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: Colors.border,
+  },
+  stepActive: { backgroundColor: Colors.primary },
+  stepLine: { width: 40, height: 2, backgroundColor: Colors.border },
   form: { gap: Spacing.md },
+  avatarHint: {
+    fontSize: FontSize.sm,
+    color: Colors.textSecondary,
+    textAlign: 'center',
+    lineHeight: 20,
+  },
   error: {
     fontSize: FontSize.sm,
-    color: Colors.error,
-    textAlign: 'center',
-  },
-  submitBtn: { marginTop: Spacing.sm },
-  switchLink: { alignItems: 'center' },
-  switchText: {
-    fontSize: FontSize.md,
-    color: Colors.textSecondary,
-  },
-  switchBold: {
-    fontWeight: FontWeight.semibold,
     color: Colors.primary,
+    textAlign: 'center',
+    fontWeight: FontWeight.medium,
   },
+  buttonRow: { flexDirection: 'row', gap: Spacing.sm },
+  backBtn: { flex: 1 },
+  submitBtn: { flex: 1 },
+  switchLink: { alignItems: 'center' },
+  switchText: { fontSize: FontSize.md, color: Colors.textSecondary },
+  switchBold: { fontWeight: FontWeight.bold, color: Colors.primary },
 });

@@ -9,22 +9,28 @@ import {
   getDocs,
   serverTimestamp,
   increment,
+  orderBy,
+  limit,
 } from 'firebase/firestore';
 import { db } from './firebase';
-import { UserProfile } from '@/types';
+import { UserProfile, LeaderboardEntry } from '@/types';
+import { DriverId, DEFAULT_DRIVER } from '@/constants/drivers';
 import { generateFriendCode } from '@/utils/code';
-import { getDateString, isDifferentDay } from '@/utils/time';
+import { getDateString } from '@/utils/time';
 
 export async function createUserProfile(
   uid: string,
   email: string,
-  displayName: string
+  displayName: string,
+  avatarId: DriverId = DEFAULT_DRIVER
 ): Promise<void> {
   const friendCode = generateFriendCode();
   const profile: Omit<UserProfile, 'uid'> = {
     email,
     displayName,
     friendCode,
+    avatarId,
+    points: 0,
     createdAt: serverTimestamp() as any,
     totalFocusMinutes: 0,
     totalSessions: 0,
@@ -53,9 +59,47 @@ export async function getUserByFriendCode(
   return { uid: docSnap.id, ...docSnap.data() } as UserProfile;
 }
 
+export async function updateAvatar(uid: string, avatarId: DriverId): Promise<void> {
+  await updateDoc(doc(db, 'users', uid), { avatarId });
+}
+
+export async function updateDisplayName(uid: string, displayName: string): Promise<void> {
+  await updateDoc(doc(db, 'users', uid), { displayName });
+}
+
+export async function updatePushToken(uid: string, token: string): Promise<void> {
+  await updateDoc(doc(db, 'users', uid), { expoPushToken: token });
+}
+
+export async function addPoints(uid: string, delta: number): Promise<void> {
+  await updateDoc(doc(db, 'users', uid), {
+    points: increment(delta),
+  });
+}
+
+export async function getLeaderboard(limitCount = 50): Promise<LeaderboardEntry[]> {
+  const q = query(
+    collection(db, 'users'),
+    orderBy('points', 'desc'),
+    limit(limitCount)
+  );
+  const snap = await getDocs(q);
+  return snap.docs.map((d, index) => {
+    const data = d.data() as UserProfile;
+    return {
+      uid: d.id,
+      displayName: data.displayName,
+      avatarId: data.avatarId ?? DEFAULT_DRIVER,
+      points: data.points ?? 0,
+      rank: index + 1,
+    };
+  });
+}
+
 export async function recordSessionCompletion(
   uid: string,
-  focusMinutes: number
+  focusMinutes: number,
+  pointsEarned: number
 ): Promise<void> {
   const today = getDateString();
   const profileRef = doc(db, 'users', uid);
@@ -69,11 +113,10 @@ export async function recordSessionCompletion(
   if (!lastDate) {
     streakDelta = 1;
   } else if (lastDate === today) {
-    // already counted today
     streakDelta = 0;
   } else {
     const yesterday = getDateString(new Date(Date.now() - 86400000));
-    streakDelta = lastDate === yesterday ? 1 : -(profile.currentStreak - 1);
+    streakDelta = lastDate === yesterday ? 1 : -profile.currentStreak; // reset to 0 on gap
   }
 
   await updateDoc(profileRef, {
@@ -81,5 +124,6 @@ export async function recordSessionCompletion(
     totalSessions: increment(1),
     currentStreak: increment(streakDelta),
     lastSessionDate: today,
+    points: increment(pointsEarned),
   });
 }

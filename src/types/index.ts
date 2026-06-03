@@ -1,4 +1,5 @@
 import { Timestamp } from 'firebase/firestore';
+import { DriverId } from '@/constants/drivers';
 
 // ─── Auth ────────────────────────────────────────────────────────────────────
 
@@ -15,11 +16,24 @@ export interface UserProfile {
   email: string;
   displayName: string;
   friendCode: string;
+  avatarId: DriverId;
+  points: number;
+  expoPushToken?: string;
   createdAt: Timestamp;
   totalFocusMinutes: number;
   totalSessions: number;
   currentStreak: number;
-  lastSessionDate: string | null; // ISO date string YYYY-MM-DD
+  lastSessionDate: string | null; // ISO date YYYY-MM-DD
+}
+
+// ─── Leaderboard ─────────────────────────────────────────────────────────────
+
+export interface LeaderboardEntry {
+  uid: string;
+  displayName: string;
+  avatarId: DriverId;
+  points: number;
+  rank: number;
 }
 
 // ─── Friends ─────────────────────────────────────────────────────────────────
@@ -29,6 +43,7 @@ export interface FriendRequest {
   fromUid: string;
   fromDisplayName: string;
   fromFriendCode: string;
+  fromAvatarId: DriverId;
   toFriendCode: string;
   status: 'pending' | 'accepted' | 'rejected';
   createdAt: Timestamp;
@@ -38,6 +53,7 @@ export interface Friend {
   uid: string;
   displayName: string;
   friendCode: string;
+  avatarId: DriverId;
   addedAt: Timestamp;
 }
 
@@ -47,6 +63,7 @@ export interface SessionInvite {
   joinCode: string;
   fromUid: string;
   fromDisplayName: string;
+  fromAvatarId: DriverId;
   toUid: string;
   status: 'pending' | 'accepted' | 'declined';
   createdAt: Timestamp;
@@ -58,8 +75,9 @@ export type SessionStatus =
   | 'waiting'
   | 'active'
   | 'paused'
+  | 'solo'       // one participant left, the other continues
   | 'completed'
-  | 'broken'
+  | 'broken'     // both left
   | 'cancelled';
 
 export type PomodoroPhase = 'focus' | 'shortBreak' | 'longBreak';
@@ -68,30 +86,38 @@ export interface TimerState {
   phase: PomodoroPhase;
   timeRemaining: number; // seconds
   isRunning: boolean;
-  phaseCount: number; // number of completed focus phases
-  endsAt: Timestamp | null; // when the current running phase ends (server time)
+  phaseCount: number;
+  endsAt: Timestamp | null;
   lastUpdatedAt: Timestamp;
 }
 
 export interface SessionSettings {
-  focusDuration: number; // seconds
+  focusDuration: number;
   shortBreakDuration: number;
   longBreakDuration: number;
 }
 
+export type SessionMode = 'duo' | 'solo';
+
 export interface Session {
   id: string;
+  mode: SessionMode;
   hostId: string;
   hostDisplayName: string;
+  hostAvatarId: DriverId;
   participantId: string | null;
   participantDisplayName: string | null;
+  participantAvatarId: DriverId | null;
   status: SessionStatus;
   joinCode: string;
   timerState: TimerState;
   settings: SessionSettings;
+  leftParticipants: string[];   // UIDs who left (can rejoin)
   isBroken: boolean;
   hostFocusBroken: boolean;
   participantFocusBroken: boolean;
+  hostPointsEarned: number;
+  participantPointsEarned: number;
   createdAt: Timestamp;
   startedAt: Timestamp | null;
   completedAt: Timestamp | null;
@@ -109,6 +135,8 @@ export interface SessionHistoryEntry {
   phasesCompleted: number;
   wasCompleted: boolean;
   wasBroken: boolean;
+  pointsEarned: number;
+  pointsLost: number;
   createdAt: Timestamp;
 }
 
