@@ -37,6 +37,12 @@
     ],
     "experiments": {
       "typedRoutes": true
-    }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "80a5266d-4fab-4f57-97fa-a908ac035758"
+      }
+    },
+    "owner": "auvro_islam"
   }
 }

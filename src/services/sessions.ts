@@ -301,16 +301,6 @@ export async function cancelSession(sessionId: string): Promise<void> {
   });
 }
 
-export async function markSessionBroken(sessionId: string, byHost: boolean): Promise<void> {
-  const field = byHost ? 'hostFocusBroken' : 'participantFocusBroken';
-  await updateDoc(doc(db, 'sessions', sessionId), {
-    [field]: true,
-    isBroken: true,
-    'timerState.isRunning': false,
-    'timerState.endsAt': null,
-  });
-}
-
 // ─── Session Invites ──────────────────────────────────────────────────────────
 
 export async function sendSessionInvite(

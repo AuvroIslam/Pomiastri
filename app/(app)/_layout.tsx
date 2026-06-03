@@ -63,7 +63,7 @@ export default function AppLayout() {
         options={{
           title: 'FRIENDS',
           tabBarIcon: ({ focused }) => (
-            <TabIcon source={DRIVERS.charles.assets.helmet} focused={focused} />
+            <TabIcon source={F1Assets.checkerBox} focused={focused} />
           ),
         }}
       />

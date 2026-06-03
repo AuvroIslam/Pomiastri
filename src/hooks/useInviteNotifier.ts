@@ -8,9 +8,8 @@ import { sendLocalNotification } from '@/services/notifications';
  * a heads-up local notification + haptic the moment a NEW one arrives — so a
  * friend's race invite is felt instantly while the app is open (PUBG-style).
  *
- * NOTE: This covers the foregrounded case. To notify a user whose app is fully
- * closed/backgrounded, you need a Cloud Function that calls the Expo Push API
- * using the recipient's stored `expoPushToken` (see src/services/notifications.ts).
+ * Background/closed case is handled by sendPush() in sessions.ts → Vercel server
+ * → Expo Push API → FCM V1. Both layers work together.
  */
 export function useInviteNotifier(uid: string | undefined) {
   const { invites } = useSessionInvites(uid);

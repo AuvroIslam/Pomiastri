@@ -32,6 +32,22 @@ yarn-error.*
 
 # local env files
 .env*.local
+server/.env.local
+
+# Original F1 asset source folder — copied to assets/f1/, no longer needed
+F1Drivers/
+
+# Claude Code / AI assistant files — not needed in repo
+.claude/
+CLAUDE.md
+AGENTS.md
+*.agent
+C:\Users\*\.claude\
+
+# Firebase service account keys — NEVER commit these
+*firebase-adminsdk*.json
+*service-account*.json
+*serviceAccount*.json
 
 # typescript
 *.tsbuildinfo

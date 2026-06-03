@@ -9,11 +9,9 @@ import {
   getDocs,
   serverTimestamp,
   increment,
-  orderBy,
-  limit,
 } from 'firebase/firestore';
 import { db } from './firebase';
-import { UserProfile, LeaderboardEntry } from '@/types';
+import { UserProfile } from '@/types';
 import { DriverId, DEFAULT_DRIVER } from '@/constants/drivers';
 import { generateFriendCode } from '@/utils/code';
 import { getDateString } from '@/utils/time';
@@ -77,24 +75,6 @@ export async function addPoints(uid: string, delta: number): Promise<void> {
   });
 }
 
-export async function getLeaderboard(limitCount = 50): Promise<LeaderboardEntry[]> {
-  const q = query(
-    collection(db, 'users'),
-    orderBy('points', 'desc'),
-    limit(limitCount)
-  );
-  const snap = await getDocs(q);
-  return snap.docs.map((d, index) => {
-    const data = d.data() as UserProfile;
-    return {
-      uid: d.id,
-      displayName: data.displayName,
-      avatarId: data.avatarId ?? DEFAULT_DRIVER,
-      points: data.points ?? 0,
-      rank: index + 1,
-    };
-  });
-}
 
 export async function recordSessionCompletion(
   uid: string,

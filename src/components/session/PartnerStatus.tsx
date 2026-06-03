@@ -10,6 +10,7 @@ interface PartnerStatusProps {
   isConnected: boolean;
   focusBroken: boolean;
   hasLeft?: boolean;
+  isOnBreak?: boolean;
 }
 
 export function PartnerStatus({
@@ -18,6 +19,7 @@ export function PartnerStatus({
   isConnected,
   focusBroken,
   hasLeft = false,
+  isOnBreak = false,
 }: PartnerStatusProps) {
   const dotColor = focusBroken || hasLeft
     ? Colors.error
@@ -37,7 +39,12 @@ export function PartnerStatus({
     <View style={styles.container}>
       <AvatarDisplay
         avatarId={avatarId}
-        state={focusBroken || hasLeft ? 'sad' : isConnected ? 'focus' : 'idle'}
+        state={
+          focusBroken || hasLeft ? 'sad'
+          : !isConnected ? 'idle'
+          : isOnBreak ? 'happy'
+          : 'focus'
+        }
         size={44}
         animate={false}
       />

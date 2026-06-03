@@ -1,0 +1,43 @@
+{
+  "cli": {
+    "version": ">= 16.0.0"
+  },
+  "build": {
+    "development": {
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk",
+        "gradleCommand": ":app:assembleDebug"
+      },
+      "env": {
+        "EXPO_PUBLIC_FIREBASE_API_KEY": "REDACTED",
+        "EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN": "pomiastri.firebaseapp.com",
+        "EXPO_PUBLIC_FIREBASE_PROJECT_ID": "pomiastri",
+        "EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET": "pomiastri.firebasestorage.app",
+        "EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID": "525196871444",
+        "EXPO_PUBLIC_FIREBASE_APP_ID": "REDACTED",
+        "EXPO_PUBLIC_NOTIFY_URL": "https://pompiastri-server.vercel.app"
+      }
+    },
+    "preview": {
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_FIREBASE_API_KEY": "REDACTED",
+        "EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN": "pomiastri.firebaseapp.com",
+        "EXPO_PUBLIC_FIREBASE_PROJECT_ID": "pomiastri",
+        "EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET": "pomiastri.firebasestorage.app",
+        "EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID": "525196871444",
+        "EXPO_PUBLIC_FIREBASE_APP_ID": "REDACTED",
+        "EXPO_PUBLIC_NOTIFY_URL": "https://pompiastri-server.vercel.app"
+      }
+    },
+    "production": {
+      "android": {
+        "buildType": "app-bundle"
+      }
+    }
+  }
+}

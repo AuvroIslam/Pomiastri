@@ -78,10 +78,10 @@ function HistoryItem({ entry }: { entry: SessionHistoryEntry }) {
       <View style={histStyles.info}>
         <Text style={histStyles.label}>
           {entry.wasCompleted ? 'Completed' : entry.wasBroken ? 'Broken' : 'Partial'}
-          {entry.partnerDisplayName ? ` · with ${entry.partnerDisplayName}` : ''}
+          {entry.partnerDisplayName ? ` · with ${entry.partnerDisplayName}` : ' · Solo'}
         </Text>
         <Text style={histStyles.meta}>
-          {entry.focusMinutes} min · {entry.phasesCompleted} phases
+          {entry.focusMinutes} min · {entry.phasesCompleted} laps
         </Text>
       </View>
       <View style={histStyles.pts}>

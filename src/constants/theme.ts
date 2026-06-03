@@ -28,11 +28,11 @@ export const Colors = {
   shortBreakAccent: '#00D4FF',
   longBreakAccent: '#7B2FBE',
 
-  // Semantic
+  // Semantic — error is distinct from primary so users can tell them apart
   success: '#00C853',
   warning: '#FFD600',
-  error: '#E8002D',
-  errorLight: '#2A0008',
+  error: '#FF4C2B',     // orange-red, clearly different from F1 brand red
+  errorLight: '#2A0A00',
 
   // Borders / dividers
   border: '#2A2A2A',
