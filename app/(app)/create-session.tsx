@@ -22,6 +22,7 @@ import { FriendItem } from '@/components/friends/FriendItem';
 import { Colors, Spacing, FontSize, FontWeight, Radius } from '@/constants/theme';
 import { DEFAULT_SESSION_SETTINGS } from '@/constants/pomodoro';
 import { F1Assets } from '@/constants/drivers';
+import { AppLogo } from '@/components/ui/AppLogo';
 import { Friend, SessionMode } from '@/types';
 
 const FOCUS_OPTIONS = [15, 25, 30, 45, 50, 60];
@@ -125,7 +126,7 @@ export default function CreateSessionScreen() {
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
 
         <View style={styles.headerBar}>
-          <Image source={F1Assets.logo} style={styles.f1Logo} resizeMode="contain" />
+          <AppLogo size={40} />
           <Text style={styles.title}>{mode === 'solo' ? 'SOLO PRACTICE' : 'CREATE GRAND PRIX'}</Text>
         </View>
 

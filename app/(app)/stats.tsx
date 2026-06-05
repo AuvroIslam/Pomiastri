@@ -14,6 +14,7 @@ import { Card } from '@/components/ui/Card';
 import { SessionHistoryEntry } from '@/types';
 import { Colors, Spacing, FontSize, FontWeight, Radius } from '@/constants/theme';
 import { F1Assets } from '@/constants/drivers';
+import { AppLogo } from '@/components/ui/AppLogo';
 
 export default function StatsScreen() {
   const { profile } = useAuth();
@@ -33,7 +34,7 @@ export default function StatsScreen() {
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
 
         <View style={styles.headerBar}>
-          <Image source={F1Assets.logo} style={styles.f1Logo} resizeMode="contain" />
+          <AppLogo size={40} />
           <Text style={styles.title}>RACE HISTORY</Text>
         </View>
 

@@ -29,6 +29,7 @@ import { FriendItem } from '@/components/friends/FriendItem';
 import { AvatarDisplay } from '@/components/avatar/AvatarDisplay';
 import { Colors, Spacing, FontSize, FontWeight, Radius } from '@/constants/theme';
 import { F1Assets } from '@/constants/drivers';
+import { AppLogo } from '@/components/ui/AppLogo';
 import { Friend } from '@/types';
 import { normalizeFriendCode } from '@/utils/code';
 
@@ -117,7 +118,7 @@ export default function FriendsScreen() {
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
 
         <View style={styles.headerBar}>
-          <Image source={F1Assets.logo} style={styles.f1Logo} resizeMode="contain" />
+          <AppLogo size={40} />
           <Text style={styles.title}>FRIENDS</Text>
         </View>
 

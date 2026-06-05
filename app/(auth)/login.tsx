@@ -17,6 +17,7 @@ import { loginUser } from '@/services/auth';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Colors, Spacing, FontSize, FontWeight, Radius } from '@/constants/theme';
+import { AppLogo } from '@/components/ui/AppLogo';
 import { F1Assets } from '@/constants/drivers';
 
 export default function LoginScreen() {
@@ -66,7 +67,7 @@ export default function LoginScreen() {
       >
         {/* F1 Logo */}
         <View style={styles.header}>
-          <Image source={F1Assets.logo} style={styles.logo} resizeMode="contain" />
+          <AppLogo size={72} />
           <Text style={styles.appName}>POMIASTRI</Text>
           <Text style={styles.tagline}>Study. Race. Dominate.</Text>
         </View>

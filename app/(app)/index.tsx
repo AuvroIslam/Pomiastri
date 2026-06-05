@@ -22,6 +22,7 @@ import { AvatarDisplay } from '@/components/avatar/AvatarDisplay';
 import { LeaderboardRow } from '@/components/leaderboard/LeaderboardRow';
 import { Colors, Spacing, FontSize, FontWeight, Radius } from '@/constants/theme';
 import { F1Assets } from '@/constants/drivers';
+import { AppLogo } from '@/components/ui/AppLogo';
 
 import { Session } from '@/types';
 
@@ -66,7 +67,7 @@ export default function HomeScreen() {
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
 
         <View style={styles.headerBar}>
-          <Image source={F1Assets.logo} style={styles.f1Logo} resizeMode="contain" />
+          <AppLogo size={40} />
           <TouchableOpacity onPress={confirmLogout} style={styles.logoutBtn}>
             <Text style={styles.logoutText}>PIT OUT</Text>
           </TouchableOpacity>
@@ -236,19 +237,19 @@ const styles = StyleSheet.create({
   container: {
     paddingHorizontal: Spacing.xl,
     paddingTop: Spacing.md,
-    paddingBottom: Spacing.xxl,
-    gap: Spacing.lg,
+    paddingBottom: Spacing.xl,
+    gap: Spacing.md,
   },
   headerBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   f1Logo: { width: 80, height: 28 },
   logoutBtn: {
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: Colors.border,
-    paddingHorizontal: Spacing.sm,
-    paddingVertical: 4,
-    borderRadius: Radius.sm,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: Radius.full,
   },
-  logoutText: { fontSize: FontSize.xs, color: Colors.textMuted, fontWeight: FontWeight.bold, letterSpacing: 1 },
+  logoutText: { fontSize: FontSize.sm, color: Colors.textSecondary, fontWeight: FontWeight.bold, letterSpacing: 1 },
   onboardCard: { gap: 2, paddingVertical: Spacing.md },
   onboardTitle: {
     fontSize: FontSize.sm,
@@ -289,7 +290,7 @@ const styles = StyleSheet.create({
   rejoinTitle: { fontSize: FontSize.sm, fontWeight: FontWeight.black, color: Colors.textOnPrimary, letterSpacing: 1 },
   rejoinSub: { fontSize: FontSize.xs, color: 'rgba(255,255,255,0.7)' },
   rejoinArrow: { marginLeft: 'auto', fontSize: 24, color: Colors.textOnPrimary },
-  ctaRow: { gap: Spacing.sm },
+  ctaRow: { gap: Spacing.sm, marginTop: Spacing.xs },
   statsRow: { flexDirection: 'row', gap: Spacing.sm },
   section: { gap: Spacing.sm },
   sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },

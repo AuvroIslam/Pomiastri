@@ -34,6 +34,7 @@ import { CheckeredFlag } from '@/components/ui/CheckeredFlag';
 import { PointsToast } from '@/components/ui/PointsToast';
 import { Colors, Spacing, FontSize, FontWeight, Radius } from '@/constants/theme';
 import { F1Assets, DriverState } from '@/constants/drivers';
+import { AppLogo } from '@/components/ui/AppLogo';
 import { getNextPhase, getPhaseDuration, PHASE_LABELS } from '@/constants/pomodoro';
 import { PomodoroPhase } from '@/types';
 
@@ -317,7 +318,7 @@ export default function SessionScreen() {
 
         {/* ── Top bar ── */}
         <View style={styles.topBar}>
-          <Image source={F1Assets.logo} style={styles.f1Logo} resizeMode="contain" />
+          <AppLogo size={40} />
           {(isActive || isPaused) && <PhaseIndicator phaseCount={timerState.phaseCount} />}
           <TouchableOpacity onPress={() => setShowRetireModal(true)} style={styles.retireBtn}>
             <Text style={styles.retireText}>RETIRE</Text>

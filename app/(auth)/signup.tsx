@@ -15,6 +15,7 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { AvatarSelector } from '@/components/avatar/AvatarSelector';
 import { Colors, Spacing, FontSize, FontWeight, Radius } from '@/constants/theme';
+import { AppLogo } from '@/components/ui/AppLogo';
 import { DriverId, DEFAULT_DRIVER, F1Assets } from '@/constants/drivers';
 
 type Step = 'credentials' | 'avatar';
@@ -65,7 +66,7 @@ export default function SignupScreen() {
       >
         {/* Header */}
         <View style={styles.header}>
-          <Image source={F1Assets.logo} style={styles.logo} resizeMode="contain" />
+          <AppLogo size={56} />
           <Text style={styles.title}>
             {step === 'credentials' ? 'JOIN THE GRID' : 'PICK YOUR DRIVER'}
           </Text>

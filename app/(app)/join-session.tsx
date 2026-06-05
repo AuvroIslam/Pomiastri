@@ -17,6 +17,7 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Colors, Spacing, FontSize, FontWeight } from '@/constants/theme';
 import { F1Assets } from '@/constants/drivers';
+import { AppLogo } from '@/components/ui/AppLogo';
 
 export default function JoinSessionScreen() {
   const router = useRouter();
@@ -60,7 +61,7 @@ export default function JoinSessionScreen() {
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <View style={styles.container}>
           <View style={styles.headerBar}>
-            <Image source={F1Assets.logo} style={styles.f1Logo} resizeMode="contain" />
+            <AppLogo size={40} />
             <Text style={styles.title}>JOIN THE GRID</Text>
           </View>
 

@@ -1,54 +1,132 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { View, Text, StyleSheet, Image, Animated } from 'react-native';
+import { View, StyleSheet, Animated, Easing } from 'react-native';
 import * as SplashScreen from 'expo-splash-screen';
+import { useAudioPlayer } from 'expo-audio';
 import { AuthProvider, useAuth } from '@/context/AuthContext';
-import { Colors, FontSize, FontWeight, Spacing } from '@/constants/theme';
-import { AnimatedFrames } from '@/components/ui/AnimatedFrames';
+import { Colors, Spacing, Radius } from '@/constants/theme';
+import { SplashAnimation } from '@/components/ui/SplashAnimation';
+import { AppLogo } from '@/components/ui/AppLogo';
 import { F1Assets } from '@/constants/drivers';
 
-// DO NOT call SplashScreen.preventAutoHideAsync() here.
-// In a dev build it blocks the Expo Dev Client home screen (scan QR) from
-// appearing. The native splash auto-hides when React first renders, and our
-// React overlay (charles animation) takes over from there.
+const engineSound = require('../assets/sfx/charlesEngineSound.mp3');
 
-// How long to show our branded loading screen before revealing the app
-const MIN_SPLASH_MS = 2000;
+// DO NOT call SplashScreen.preventAutoHideAsync() here — it blocks the
+// Expo Dev Client launcher in dev builds. Native splash auto-hides on first render.
+
+const MIN_SPLASH_MS = 2200;
+
+/** Indeterminate sliding loading bar */
+function LoadingBar() {
+  const translateX = useRef(new Animated.Value(-70)).current;
+
+  useEffect(() => {
+    const anim = Animated.loop(
+      Animated.timing(translateX, {
+        toValue: 210,
+        duration: 1000,
+        easing: Easing.inOut(Easing.ease),
+        useNativeDriver: true,
+      })
+    );
+    anim.start();
+    return () => anim.stop();
+  }, []);
+
+  return (
+    <View style={styles.barTrack}>
+      <Animated.View style={[styles.barFill, { transform: [{ translateX }] }]} />
+    </View>
+  );
+}
 
 function RootNavigator() {
   const { user, loading } = useAuth();
   const [showOverlay, setShowOverlay] = useState(true);
-  const fadeAnim = useRef(new Animated.Value(1)).current;
+  const [carDone, setCarDone] = useState(false);
+  const [readyToReveal, setReadyToReveal] = useState(false);
+  const [logoShowing, setLogoShowing] = useState(false);
 
+  const fadeAnim = useRef(new Animated.Value(1)).current;
+  const carOpacity = useRef(new Animated.Value(1)).current;
+  const logoOpacity = useRef(new Animated.Value(0)).current;
+  const logoScale = useRef(new Animated.Value(0.4)).current;
+  const logoTriggeredRef = useRef(false);
+
+  const enginePlayer = useAudioPlayer(engineSound);
+
+  // Rev the engine when the splash appears (once)
   useEffect(() => {
-    // Hide the native splash immediately after a short delay so the
-    // app is never stuck if Firebase is slow. Our React overlay stays
-    // on top until auth resolves AND MIN_SPLASH_MS has elapsed.
-    const nativeTimer = setTimeout(() => {
-      SplashScreen.hideAsync().catch(() => {});
-    }, 300);
-    return () => clearTimeout(nativeTimer);
+    try {
+      enginePlayer.seekTo(0);
+      enginePlayer.play();
+    } catch {
+      // audio is best-effort — never block startup
+    }
   }, []);
 
   useEffect(() => {
-    if (loading) return;
+    const t = setTimeout(() => {
+      SplashScreen.hideAsync().catch(() => {});
+    }, 300);
+    return () => clearTimeout(t);
+  }, []);
 
-    // Auth resolved — wait for minimum display time then fade out
-    const delay = setTimeout(() => {
+  // Gate: auth done + minimum time elapsed
+  useEffect(() => {
+    if (loading) return;
+    const t = setTimeout(() => setReadyToReveal(true), MIN_SPLASH_MS);
+    return () => clearTimeout(t);
+  }, [loading]);
+
+  // Car animation finished → fade it out
+  const handleCarComplete = useCallback(() => {
+    setCarDone(true);
+    Animated.timing(carOpacity, {
+      toValue: 0,
+      duration: 400,
+      useNativeDriver: true,
+    }).start();
+  }, []);
+
+  // Car done → show logo immediately (loading bar still visible)
+  useEffect(() => {
+    if (!carDone || logoTriggeredRef.current) return;
+    logoTriggeredRef.current = true;
+
+    setLogoShowing(false); // keep loading bar visible
+    Animated.parallel([
+        Animated.timing(logoOpacity, {
+          toValue: 1,
+          duration: 500,
+          useNativeDriver: true,
+        }),
+        Animated.spring(logoScale, {
+          toValue: 1,
+          useNativeDriver: true,
+          tension: 120,
+          friction: 7,
+        }),
+      ]).start();
+  }, [carDone]);
+
+  // Both gates open → hide loading bar and fade out overlay
+  useEffect(() => {
+    if (!carDone || !readyToReveal || !logoTriggeredRef.current) return;
+
+    setLogoShowing(true); // hides loading bar
+    setTimeout(() => {
       Animated.timing(fadeAnim, {
         toValue: 0,
         duration: 400,
         useNativeDriver: true,
       }).start(() => setShowOverlay(false));
-    }, MIN_SPLASH_MS);
-
-    return () => clearTimeout(delay);
-  }, [loading]);
+    }, 700);
+  }, [carDone, readyToReveal]);
 
   return (
     <>
-      {/* App renders underneath the overlay */}
       <StatusBar style="light" />
       <Stack screenOptions={{ headerShown: false, animation: 'fade' }}>
         <Stack.Protected guard={!!user}>
@@ -59,17 +137,32 @@ function RootNavigator() {
         </Stack.Protected>
       </Stack>
 
-      {/* Branded loading overlay — fades out once auth + timer done */}
       {showOverlay && (
         <Animated.View style={[styles.overlay, { opacity: fadeAnim }]}>
-          <Image source={F1Assets.logo} style={styles.logo} resizeMode="contain" />
-          <AnimatedFrames
-            frames={F1Assets.splashFrames}
-            fps={14}
-            loop
-            style={styles.splashAnim}
-          />
-          <Text style={styles.loadingText}>LOADING...</Text>
+          {/* Loading bar — hidden once logo appears */}
+          {!logoShowing && <LoadingBar />}
+
+          {/* Car animation — fades out when done */}
+          <Animated.View style={{ opacity: carOpacity }}>
+            <SplashAnimation
+              frames={F1Assets.splashFrames}
+              fps={12}
+              style={styles.splashAnim}
+              onComplete={handleCarComplete}
+            />
+          </Animated.View>
+
+          {/* Logo — springs in after car fades and loading is done */}
+          <Animated.View
+            style={[
+              StyleSheet.absoluteFill,
+              styles.logoWrap,
+              { opacity: logoOpacity, transform: [{ scale: logoScale }] },
+            ]}
+            pointerEvents="none"
+          >
+            <AppLogo size={130} />
+          </Animated.View>
         </Animated.View>
       )}
     </>
@@ -90,15 +183,25 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: Colors.background,
-    gap: Spacing.lg,
+    gap: Spacing.xxl,
     zIndex: 999,
   },
-  logo: { width: 100, height: 34 },
+  barTrack: {
+    width: 200,
+    height: 4,
+    borderRadius: Radius.full,
+    backgroundColor: Colors.surfaceElevated,
+    overflow: 'hidden',
+  },
+  barFill: {
+    width: 60,
+    height: 4,
+    borderRadius: Radius.full,
+    backgroundColor: Colors.primary,
+  },
   splashAnim: { width: 280, height: 280 },
-  loadingText: {
-    fontSize: FontSize.xs,
-    fontWeight: FontWeight.black,
-    color: Colors.textMuted,
-    letterSpacing: 4,
+  logoWrap: {
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

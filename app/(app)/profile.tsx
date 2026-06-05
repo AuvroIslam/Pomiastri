@@ -19,6 +19,7 @@ import { AvatarDisplay } from '@/components/avatar/AvatarDisplay';
 import { AvatarSelector } from '@/components/avatar/AvatarSelector';
 import { Colors, Spacing, FontSize, FontWeight, Radius } from '@/constants/theme';
 import { F1Assets, DriverId, DriverState } from '@/constants/drivers';
+import { AppLogo } from '@/components/ui/AppLogo';
 
 const SHOWCASE_STATES: DriverState[] = ['idle', 'focus', 'happy', 'sad', 'car', 'helmet'];
 const SHOWCASE_LABELS: Record<DriverState, string> = {
@@ -91,7 +92,7 @@ export default function ProfileScreen() {
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
 
         <View style={styles.headerBar}>
-          <Image source={F1Assets.logo} style={styles.f1Logo} resizeMode="contain" />
+          <AppLogo size={40} />
           <Text style={styles.title}>GARAGE</Text>
         </View>
 
