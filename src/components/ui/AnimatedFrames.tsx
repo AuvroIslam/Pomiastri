@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Image, View, ViewStyle, ImageSourcePropType } from 'react-native';
+import { Image, View, ViewStyle, ImageSourcePropType, StyleSheet } from 'react-native';
 
 interface AnimatedFramesProps {
   frames: ImageSourcePropType[];
@@ -9,6 +9,11 @@ interface AnimatedFramesProps {
   onComplete?: () => void;
 }
 
+/**
+ * Frame-by-frame animation using stacked Images.
+ * ALL frames are rendered simultaneously (pre-loaded) — only the active frame
+ * has opacity 1. This eliminates the blank flash caused by swapping Image sources.
+ */
 export function AnimatedFrames({
   frames,
   fps = 8,
@@ -46,12 +51,20 @@ export function AnimatedFrames({
   if (frames.length === 0) return null;
 
   return (
-    <View style={[{ width: '100%', height: '100%' }, style]}>
-      <Image
-        source={frames[frameIndex]}
-        style={{ width: '100%', height: '100%' }}
-        resizeMode="contain"
-      />
+    <View style={[styles.container, style]}>
+      {frames.map((src, i) => (
+        <Image
+          key={i}
+          source={src}
+          style={[StyleSheet.absoluteFill, { opacity: i === frameIndex ? 1 : 0 }]}
+          resizeMode="contain"
+          fadeDuration={0}
+        />
+      ))}
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  container: { width: '100%', height: '100%' },
+});
