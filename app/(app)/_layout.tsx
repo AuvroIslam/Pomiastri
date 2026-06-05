@@ -1,5 +1,5 @@
 import { Tabs } from 'expo-router';
-import { Image, ImageSourcePropType, StyleSheet } from 'react-native';
+import { Image, ImageSourcePropType, StyleSheet, View } from 'react-native';
 import { Colors, FontSize } from '@/constants/theme';
 import { F1Assets, DRIVERS } from '@/constants/drivers';
 import { useAuth } from '@/hooks/useAuth';
@@ -13,21 +13,24 @@ function TabIcon({
   focused: boolean;
 }) {
   return (
-    <Image
-      source={source}
-      style={[styles.icon, { opacity: focused ? 1 : 0.4 }]}
-      resizeMode="contain"
-      tintColor={focused ? Colors.primary : undefined}
-    />
+    <View style={[styles.iconWrapper, focused && styles.iconActive]}>
+      <Image
+        source={source}
+        style={styles.icon}
+        resizeMode="contain"
+      />
+    </View>
   );
 }
 
 export default function AppLayout() {
-  const { user } = useAuth();
-  // Fire an in-app heads-up notification the moment a friend's invite arrives
+  const { user, profile } = useAuth();
   useInviteNotifier(user?.uid);
 
-  const helmetIcon = DRIVERS.max.assets.helmet;
+  // Use the user's own driver helmet for GARAGE tab
+  const garageIcon = profile?.avatarId
+    ? DRIVERS[profile.avatarId]?.assets.helmet
+    : DRIVERS.charles.assets.helmet;
 
   return (
     <Tabs
@@ -63,7 +66,7 @@ export default function AppLayout() {
         options={{
           title: 'FRIENDS',
           tabBarIcon: ({ focused }) => (
-            <TabIcon source={F1Assets.checkerBox} focused={focused} />
+            <TabIcon source={DRIVERS.charles.assets.helmet} focused={focused} />
           ),
         }}
       />
@@ -81,7 +84,7 @@ export default function AppLayout() {
         options={{
           title: 'GARAGE',
           tabBarIcon: ({ focused }) => (
-            <TabIcon source={helmetIcon} focused={focused} />
+            <TabIcon source={garageIcon} focused={focused} />
           ),
         }}
       />
@@ -95,5 +98,18 @@ export default function AppLayout() {
 }
 
 const styles = StyleSheet.create({
-  icon: { width: 24, height: 24 },
+  iconWrapper: {
+    width: 32,
+    height: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    opacity: 0.45,
+  },
+  iconActive: {
+    opacity: 1,
+  },
+  icon: {
+    width: 32,
+    height: 32,
+  },
 });

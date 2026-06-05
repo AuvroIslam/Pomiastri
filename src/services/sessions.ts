@@ -141,7 +141,7 @@ export async function getSession(sessionId: string): Promise<Session | null> {
 export async function getActiveSessionForUser(uid: string): Promise<Session | null> {
   const activeStatuses = ['waiting', 'active', 'paused', 'solo'];
 
-  // Check as host
+  // Check as host — skip sessions the user has permanently retired from
   const hostQuery = query(
     collection(db, 'sessions'),
     where('hostId', '==', uid),
@@ -150,10 +150,13 @@ export async function getActiveSessionForUser(uid: string): Promise<Session | nu
   const hostSnap = await getDocs(hostQuery);
   if (!hostSnap.empty) {
     const d = hostSnap.docs[0];
-    return { id: d.id, ...d.data() } as Session;
+    const session = { id: d.id, ...d.data() } as Session;
+    if (!(session.leftParticipants ?? []).includes(uid)) {
+      return session;
+    }
   }
 
-  // Check as participant
+  // Check as participant — skip if retired
   const partQuery = query(
     collection(db, 'sessions'),
     where('participantId', '==', uid),
@@ -162,7 +165,10 @@ export async function getActiveSessionForUser(uid: string): Promise<Session | nu
   const partSnap = await getDocs(partQuery);
   if (!partSnap.empty) {
     const d = partSnap.docs[0];
-    return { id: d.id, ...d.data() } as Session;
+    const session = { id: d.id, ...d.data() } as Session;
+    if (!(session.leftParticipants ?? []).includes(uid)) {
+      return session;
+    }
   }
 
   return null;

@@ -2,19 +2,27 @@ import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
 import { updatePushToken } from './users';
 
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-    shouldShowBanner: true,
-    shouldShowList: true,
-  }),
-});
+// expo-notifications throws warnOfExpoGoPushUsage when loaded inside Expo Go.
+// Guard everything so it only runs in a real dev/production build.
+const isExpoGo = Constants.appOwnership === 'expo';
+
+if (!isExpoGo) {
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldShowAlert: true,
+      shouldPlaySound: true,
+      shouldSetBadge: false,
+      shouldShowBanner: true,
+      shouldShowList: true,
+    }),
+  });
+}
 
 // ─── Token registration ───────────────────────────────────────────────────────
 
 export async function registerForPushNotifications(uid: string): Promise<string | null> {
+  if (isExpoGo) return null; // not supported in Expo Go
+
   const { status: existingStatus } = await Notifications.getPermissionsAsync();
   let finalStatus = existingStatus;
 
@@ -25,7 +33,6 @@ export async function registerForPushNotifications(uid: string): Promise<string 
 
   if (finalStatus !== 'granted') return null;
 
-  // projectId is required on SDK 49+ — pulled from app config or env
   const projectId =
     Constants.expoConfig?.extra?.eas?.projectId ??
     process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID;
@@ -48,12 +55,10 @@ export async function registerForPushNotifications(uid: string): Promise<string 
   return token;
 }
 
-// ─── Local notification (in-app heads-up) ─────────────────────────────────────
+// ─── Local notification ───────────────────────────────────────────────────────
 
-export async function sendLocalNotification(
-  title: string,
-  body: string
-): Promise<void> {
+export async function sendLocalNotification(title: string, body: string): Promise<void> {
+  if (isExpoGo) return;
   await Notifications.scheduleNotificationAsync({
     content: { title, body, sound: true },
     trigger: null,
@@ -62,37 +67,25 @@ export async function sendLocalNotification(
 
 // ─── Remote push via Vercel server ────────────────────────────────────────────
 
-type NotifyEvent =
-  | 'session_invite'
-  | 'friend_request'
-  | 'partner_joined'
-  | 'partner_retired';
+type NotifyEvent = 'session_invite' | 'friend_request' | 'partner_joined' | 'partner_retired';
 
 const SERVER_URL = process.env.EXPO_PUBLIC_NOTIFY_URL;
 const API_KEY    = process.env.EXPO_PUBLIC_NOTIFY_SECRET;
 
-/**
- * Best-effort push to a user via the Vercel notification server.
- * Silently does nothing if the server URL is not configured.
- */
 export async function sendPush(
   toUid: string,
   event: NotifyEvent,
   fromDisplayName: string,
   data?: Record<string, string>
 ): Promise<void> {
-  if (!SERVER_URL || !API_KEY) return; // not configured yet — dev mode
-
+  if (!SERVER_URL || !API_KEY) return;
   try {
     await fetch(`${SERVER_URL}/api/notify`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': API_KEY,
-      },
+      headers: { 'Content-Type': 'application/json', 'x-api-key': API_KEY },
       body: JSON.stringify({ event, toUid, fromDisplayName, data }),
     });
   } catch {
-    // Network error — push is best-effort, never crash the app
+    // best-effort
   }
 }
