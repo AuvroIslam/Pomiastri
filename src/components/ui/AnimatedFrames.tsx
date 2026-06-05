@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Image, StyleSheet, View, ViewStyle, ImageSourcePropType } from 'react-native';
+import { Image, View, ViewStyle, ImageSourcePropType } from 'react-native';
 
 interface AnimatedFramesProps {
   frames: ImageSourcePropType[];
@@ -21,6 +21,7 @@ export function AnimatedFrames({
 
   useEffect(() => {
     if (frames.length === 0) return;
+    setFrameIndex(0);
 
     intervalRef.current = setInterval(() => {
       setFrameIndex((prev) => {
@@ -45,10 +46,10 @@ export function AnimatedFrames({
   if (frames.length === 0) return null;
 
   return (
-    <View style={[StyleSheet.absoluteFill, style]}>
+    <View style={[{ width: '100%', height: '100%' }, style]}>
       <Image
         source={frames[frameIndex]}
-        style={StyleSheet.absoluteFill}
+        style={{ width: '100%', height: '100%' }}
         resizeMode="contain"
       />
     </View>

@@ -139,6 +139,11 @@ export const F1Assets: {
   startLights: ImageSourcePropType[];
   checkerFlagFrames: ImageSourcePropType[];
   splashFrames: ImageSourcePropType[];
+  // Tab bar icons — single-color black silhouettes (work with tintColor)
+  iconHome: ImageSourcePropType;
+  iconFriends: ImageSourcePropType;
+  iconGrid: ImageSourcePropType;
+  iconGarage: ImageSourcePropType;
 } = {
   logo: require('../../assets/f1/ui/F1Logo.png'),
   carbonFiber: require('../../assets/f1/ui/carbonFiber.png'),
@@ -192,4 +197,8 @@ export const F1Assets: {
     require('../../assets/f1/ui/splash/16.gif'),
     require('../../assets/f1/ui/splash/17.gif'),
   ],
+  iconHome:    require('../../assets/f1/ui/icon-home.png'),
+  iconFriends: require('../../assets/f1/ui/icon-friends.png'),
+  iconGrid:    require('../../assets/f1/ui/checkered-flag.png'),
+  iconGarage:  require('../../assets/f1/ui/icon-garage.png'),
 };
