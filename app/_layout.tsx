@@ -8,7 +8,10 @@ import { Colors, FontSize, FontWeight, Spacing } from '@/constants/theme';
 import { AnimatedFrames } from '@/components/ui/AnimatedFrames';
 import { F1Assets } from '@/constants/drivers';
 
-SplashScreen.preventAutoHideAsync();
+// DO NOT call SplashScreen.preventAutoHideAsync() here.
+// In a dev build it blocks the Expo Dev Client home screen (scan QR) from
+// appearing. The native splash auto-hides when React first renders, and our
+// React overlay (charles animation) takes over from there.
 
 // How long to show our branded loading screen before revealing the app
 const MIN_SPLASH_MS = 2000;
