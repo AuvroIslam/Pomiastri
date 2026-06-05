@@ -20,12 +20,14 @@ import { AvatarSelector } from '@/components/avatar/AvatarSelector';
 import { Colors, Spacing, FontSize, FontWeight, Radius } from '@/constants/theme';
 import { F1Assets, DriverId, DriverState } from '@/constants/drivers';
 
-const SHOWCASE_STATES: DriverState[] = ['idle', 'focus', 'happy', 'sad'];
+const SHOWCASE_STATES: DriverState[] = ['idle', 'focus', 'happy', 'sad', 'car', 'helmet'];
 const SHOWCASE_LABELS: Record<DriverState, string> = {
   idle: 'IDLE',
   focus: 'FOCUSED',
   happy: 'HAPPY',
   sad: 'SAD',
+  car: 'CAR',
+  helmet: 'HELMET',
 };
 
 export default function ProfileScreen() {
@@ -95,7 +97,12 @@ export default function ProfileScreen() {
 
         {/* Driver showcase — auto-cycles through all moods */}
         <Card elevated style={styles.showcaseCard}>
-          <AvatarDisplay avatarId={profile?.avatarId} state={showcaseState} size={150} />
+          <AvatarDisplay
+            avatarId={profile?.avatarId}
+            state={showcaseState}
+            size={150}
+            style={showcaseState === 'car' ? { width: 260 } : undefined}
+          />
           <Text style={styles.stateLabel}>{SHOWCASE_LABELS[showcaseState]}</Text>
           {!editingName ? (
             <View style={styles.nameRow}>

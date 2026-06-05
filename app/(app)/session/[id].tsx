@@ -52,7 +52,11 @@ export default function SessionScreen() {
   const prevStatusRef = useRef<string | null>(null);
   const prevPhaseCountRef = useRef<number>(0);
 
-  const isSolo = session?.mode === 'solo';
+  // Primary check: mode field. Fallback: if no participant slot and we're the
+  // only one here (mode was not saved on very old sessions), treat as solo.
+  const isSolo =
+    session?.mode === 'solo' ||
+    (session?.mode == null && !session?.participantId && session?.hostId === user?.uid);
   const isHost = session?.hostId === user?.uid;
   const partnerName = isHost ? session?.participantDisplayName : session?.hostDisplayName;
   const partnerAvatarId = isHost ? session?.participantAvatarId : session?.hostAvatarId;
@@ -107,8 +111,8 @@ export default function SessionScreen() {
     const curr = session.status;
 
     if (curr === 'waiting') {
-      // Solo: lights are ready immediately (no partner to wait for)
-      setLightStage(isSolo ? 'ready' : session.participantId ? 'building' : 'empty');
+      // Solo: animate lights 0→4 just like duo (gives user time to see them build up)
+      setLightStage(isSolo ? 'building' : session.participantId ? 'building' : 'empty');
     } else if (prev === 'waiting' && (curr === 'active' || curr === 'solo')) {
       setLightStage('go');
     } else if (curr === 'active' || curr === 'solo' || curr === 'paused') {
@@ -202,7 +206,9 @@ export default function SessionScreen() {
     setLightStage('go');
     const sessionId = session.id;
     const settings = session.settings;
-    setTimeout(() => startSession(sessionId, settings), 600);
+    // Delay startSession so the green light (1200ms hold) can show fully
+    // before Firestore status change causes a re-render
+    setTimeout(() => startSession(sessionId, settings), 1400);
   }
 
   async function handlePause() {
@@ -318,8 +324,9 @@ export default function SessionScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* ── Start Lights (waiting state) ── */}
-        {isWaiting && (
+        {/* ── Start Lights: show during waiting AND during 'go' flash so green
+             light isn't cut off when status flips to active ── */}
+        {(isWaiting || lightStage === 'go') && (
           <View style={styles.lightsWrapper}>
             <GridStartLights
               stage={lightStage}

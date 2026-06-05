@@ -44,12 +44,20 @@ export default function CreateSessionScreen() {
 
   useFocusEffect(
     useCallback(() => {
+      // Reset stale session state every time this screen is focused.
+      // Without this, re-entering from home keeps old createdSessionId and
+      // hides the form + time pickers.
+      setCreatedSessionId(null);
+      setJoinCode(null);
+      setSentInvites([]);
+      setMode(params.mode === 'solo' ? 'solo' : 'duo');
+
       const sub = BackHandler.addEventListener('hardwareBackPress', () => {
         router.replace('/(app)');
         return true;
       });
       return () => sub.remove();
-    }, [router])
+    }, [router, params.mode])
   );
 
   async function handleCreate() {

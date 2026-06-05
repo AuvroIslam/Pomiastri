@@ -22,6 +22,7 @@ import { AvatarDisplay } from '@/components/avatar/AvatarDisplay';
 import { LeaderboardRow } from '@/components/leaderboard/LeaderboardRow';
 import { Colors, Spacing, FontSize, FontWeight, Radius } from '@/constants/theme';
 import { F1Assets } from '@/constants/drivers';
+
 import { Session } from '@/types';
 
 export default function HomeScreen() {
@@ -77,6 +78,7 @@ export default function HomeScreen() {
               avatarId={profile?.avatarId}
               state={activeSession?.status === 'active' ? 'focus' : 'idle'}
               size={130}
+              animate
             />
             <View style={styles.driverInfo}>
               <Text style={styles.greeting}>{getGreeting()}</Text>

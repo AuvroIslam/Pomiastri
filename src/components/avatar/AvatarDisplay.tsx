@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { Image, StyleSheet, View, ViewStyle } from 'react-native';
+import { Image, View, ViewStyle } from 'react-native';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -18,8 +18,9 @@ interface AvatarDisplayProps {
 }
 
 // Characters sit in the centre of their canvas with ~20% transparent padding.
-// Upscale by 1.4× and clip so the character fills the frame properly.
-const ZOOM = 1.4;
+// We upscale by 1.4× — flex centering + overflow:hidden creates the zoom/crop effect.
+// Car/helmet images are full-bleed so no upscale needed.
+const CHARACTER_ZOOM = 1.4;
 
 export function AvatarDisplay({
   avatarId,
@@ -34,7 +35,7 @@ export function AvatarDisplay({
   useEffect(() => {
     if (!animate) return;
     scale.value = withSequence(
-      withTiming(1.12, { duration: 120 }),
+      withTiming(1.1, { duration: 120 }),
       withSpring(1, { damping: 8 })
     );
   }, [state, animate]);
@@ -43,15 +44,28 @@ export function AvatarDisplay({
     transform: [{ scale: scale.value }],
   }));
 
-  const imgSize = size * ZOOM;
-  const offset = -(imgSize - size) / 2;
+  const isFullBleed = state === 'car' || state === 'helmet';
+  const imgSize = isFullBleed ? size : size * CHARACTER_ZOOM;
 
   return (
-    <View style={[{ width: size, height: size, overflow: 'hidden' }, style]}>
+    // flex centering keeps the image centred regardless of container width/height.
+    // overflow:hidden clips the zoomed character portraits naturally.
+    <View
+      style={[
+        {
+          width: size,
+          height: size,
+          overflow: 'hidden',
+          alignItems: 'center',
+          justifyContent: 'center',
+        },
+        style,
+      ]}
+    >
       <Animated.View style={animatedStyle}>
         <Image
           source={driver.assets[state]}
-          style={{ width: imgSize, height: imgSize, marginLeft: offset, marginTop: offset }}
+          style={{ width: imgSize, height: imgSize }}
           resizeMode="contain"
         />
       </Animated.View>

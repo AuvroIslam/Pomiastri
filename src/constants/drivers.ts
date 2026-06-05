@@ -1,7 +1,7 @@
 import type { ImageSourcePropType } from 'react-native';
 
 export type DriverId = 'alonso' | 'charles' | 'girl1' | 'girl2' | 'kimi' | 'lewis' | 'max' | 'oscar';
-export type DriverState = 'idle' | 'focus' | 'happy' | 'sad';
+export type DriverState = 'idle' | 'focus' | 'happy' | 'sad' | 'car' | 'helmet';
 
 export interface DriverAssets {
   idle: ImageSourcePropType;

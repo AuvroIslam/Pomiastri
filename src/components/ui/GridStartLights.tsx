@@ -4,18 +4,19 @@ import { F1Assets } from '@/constants/drivers';
 import { Colors } from '@/constants/theme';
 
 export type LightStage =
-  | 'empty'      // no partner — lights off (frame 0)
-  | 'building'   // partner joined — lights 1→4 animate on
-  | 'ready'      // all 4 red lights on
-  | 'go'         // frame 5 green = GO!
-  | 'racing';    // hide entirely
+  | 'empty'      // lights off (frame 0)
+  | 'building'   // lights animate on one by one: 0→1→2→3→4
+  | 'ready'      // all 4 red lights on (frame 4) — static
+  | 'go'         // green light (frame 5) then fade
+  | 'racing';    // hidden
 
 interface GridStartLightsProps {
   stage: LightStage;
   onGoComplete?: () => void;
 }
 
-const FRAMES = F1Assets.startLights; // 6 frames: 0=off, 1-4=red, 5=green
+const FRAMES = F1Assets.startLights; // [f0, f1, f2, f3, f4, f5]
+const LIGHT_INTERVAL_MS = 800; // time per light (faster feel)
 
 export function GridStartLights({ stage, onGoComplete }: GridStartLightsProps) {
   const [frameIndex, setFrameIndex] = useState(0);
@@ -33,8 +34,8 @@ export function GridStartLights({ stage, onGoComplete }: GridStartLightsProps) {
       case 'building': {
         opacity.setValue(1);
         setVisible(true);
-        setFrameIndex(1);
-        let current = 1;
+        setFrameIndex(0);
+        let current = 0;
         const interval = setInterval(() => {
           current += 1;
           if (current <= 4) {
@@ -42,7 +43,7 @@ export function GridStartLights({ stage, onGoComplete }: GridStartLightsProps) {
           } else {
             clearInterval(interval);
           }
-        }, 700);
+        }, LIGHT_INTERVAL_MS);
         return () => clearInterval(interval);
       }
 
@@ -65,7 +66,7 @@ export function GridStartLights({ stage, onGoComplete }: GridStartLightsProps) {
             setVisible(false);
             onGoComplete?.();
           });
-        }, 900);
+        }, 1000);
         return () => clearTimeout(timeout);
       }
 
@@ -77,12 +78,25 @@ export function GridStartLights({ stage, onGoComplete }: GridStartLightsProps) {
 
   if (!visible) return null;
 
-  const src = FRAMES[frameIndex];
-  if (!src) return null;
-
   return (
     <Animated.View style={[styles.wrapper, { opacity }]}>
-      <Image source={src} style={styles.image} resizeMode="contain" />
+      {/* Render ALL frames stacked — only the active one is opaque.
+          This pre-loads every image so there is zero loading gap between
+          frames (no blank flash — smooth video-like transition). */}
+      {FRAMES.map((src, i) => (
+        <Image
+          key={i}
+          source={src}
+          style={[
+            StyleSheet.absoluteFill,
+            styles.image,
+            // Only current frame visible; opacity switch is instant (no fade)
+            { opacity: i === frameIndex ? 1 : 0 },
+          ]}
+          resizeMode="contain"
+          fadeDuration={0}  // Android: disable the default image load fade-in
+        />
+      ))}
     </Animated.View>
   );
 }
@@ -90,13 +104,12 @@ export function GridStartLights({ stage, onGoComplete }: GridStartLightsProps) {
 const styles = StyleSheet.create({
   wrapper: {
     width: '100%',
+    aspectRatio: 1.2,
     backgroundColor: Colors.surfaceElevated,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: Colors.border,
     overflow: 'hidden',
-    // Images are ~500×430px → ratio ~1.16. Use padding-based height trick.
-    aspectRatio: 1.2,
   },
   image: {
     width: '100%',
