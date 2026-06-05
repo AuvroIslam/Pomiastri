@@ -9,8 +9,8 @@
     "scheme": "pomiastri",
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#0A0A0A",
-        "foregroundImage": "./assets/f1/drivers/charles/idle.png"
+        "backgroundColor": "#F5C400",
+        "foregroundImage": "./assets/icon.png"
       },
       "package": "com.pomiastri.app",
       "softwareKeyboardLayoutMode": "pan",
@@ -24,7 +24,7 @@
         {
           "image": "./assets/icon.png",
           "resizeMode": "contain",
-          "backgroundColor": "#0A0A0A"
+          "backgroundColor": "#F5C400"
         }
       ],
       [
