@@ -1,11 +1,12 @@
 import { Tabs } from 'expo-router';
 import { Image, ImageSourcePropType, StyleSheet } from 'react-native';
 import { Colors, FontSize } from '@/constants/theme';
-import { F1Assets } from '@/constants/drivers';
+import { F1Assets, DRIVERS } from '@/constants/drivers';
 import { useAuth } from '@/hooks/useAuth';
 import { useInviteNotifier } from '@/hooks/useInviteNotifier';
 
-function TabIcon({
+/** Single-color silhouette icon — tintColor colors it red/gray */
+function TintIcon({
   source,
   focused,
 }: {
@@ -17,15 +18,36 @@ function TabIcon({
       source={source}
       style={styles.icon}
       resizeMode="contain"
-      // tintColor works because all icons are single-color (black silhouettes)
       tintColor={focused ? Colors.primary : Colors.textMuted}
     />
   );
 }
 
+/** Full-color helmet icon — use opacity instead of tint */
+function HelmetIcon({
+  source,
+  focused,
+}: {
+  source: ImageSourcePropType;
+  focused: boolean;
+}) {
+  return (
+    <Image
+      source={source}
+      style={[styles.icon, { opacity: focused ? 1 : 0.4 }]}
+      resizeMode="contain"
+    />
+  );
+}
+
 export default function AppLayout() {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   useInviteNotifier(user?.uid);
+
+  // Show the user's own driver helmet for GARAGE — personalised tab icon
+  const helmetSrc = profile?.avatarId
+    ? DRIVERS[profile.avatarId].assets.helmet
+    : DRIVERS.charles.assets.helmet;
 
   return (
     <Tabs
@@ -52,7 +74,7 @@ export default function AppLayout() {
         options={{
           title: 'HOME',
           tabBarIcon: ({ focused }) => (
-            <TabIcon source={F1Assets.iconHome} focused={focused} />
+            <TintIcon source={F1Assets.iconHome} focused={focused} />
           ),
         }}
       />
@@ -61,7 +83,7 @@ export default function AppLayout() {
         options={{
           title: 'FRIENDS',
           tabBarIcon: ({ focused }) => (
-            <TabIcon source={F1Assets.iconFriends} focused={focused} />
+            <TintIcon source={F1Assets.iconFriends} focused={focused} />
           ),
         }}
       />
@@ -70,7 +92,7 @@ export default function AppLayout() {
         options={{
           title: 'GRID',
           tabBarIcon: ({ focused }) => (
-            <TabIcon source={F1Assets.iconGrid} focused={focused} />
+            <TintIcon source={F1Assets.iconGrid} focused={focused} />
           ),
         }}
       />
@@ -79,7 +101,7 @@ export default function AppLayout() {
         options={{
           title: 'GARAGE',
           tabBarIcon: ({ focused }) => (
-            <TabIcon source={F1Assets.iconGarage} focused={focused} />
+            <HelmetIcon source={helmetSrc} focused={focused} />
           ),
         }}
       />
@@ -93,5 +115,5 @@ export default function AppLayout() {
 }
 
 const styles = StyleSheet.create({
-  icon: { width: 28, height: 28 },
+  icon: { width: 30, height: 30 },
 });

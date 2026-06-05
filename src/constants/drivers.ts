@@ -143,7 +143,6 @@ export const F1Assets: {
   iconHome: ImageSourcePropType;
   iconFriends: ImageSourcePropType;
   iconGrid: ImageSourcePropType;
-  iconGarage: ImageSourcePropType;
 } = {
   logo: require('../../assets/f1/ui/F1Logo.png'),
   carbonFiber: require('../../assets/f1/ui/carbonFiber.png'),
@@ -199,6 +198,6 @@ export const F1Assets: {
   ],
   iconHome:    require('../../assets/f1/ui/icon-home.png'),
   iconFriends: require('../../assets/f1/ui/icon-friends.png'),
-  iconGrid:    require('../../assets/f1/ui/checkered-flag.png'),
-  iconGarage:  require('../../assets/f1/ui/icon-garage.png'),
+  iconGrid:    require('../../assets/f1/ui/checkered-flag.png'), // GRID tab
+  // GARAGE tab uses the user's own driver helmet from DRIVERS[avatarId].assets.helmet
 };

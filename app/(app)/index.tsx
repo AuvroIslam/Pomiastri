@@ -58,7 +58,7 @@ export default function HomeScreen() {
     ]);
   }
 
-  const isNewDriver = !!profile && profile.totalSessions === 0;
+
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -108,16 +108,6 @@ export default function HomeScreen() {
             </View>
             <Text style={styles.rejoinArrow}>›</Text>
           </TouchableOpacity>
-        )}
-
-        {/* First-run guidance for new drivers */}
-        {isNewDriver && !activeSession && (
-          <Card style={styles.onboardCard}>
-            <Text style={styles.onboardTitle}>WELCOME TO THE GRID</Text>
-            <OnboardStep n="1" text="Share your Team Code with a study buddy" />
-            <OnboardStep n="2" text="Add each other on the Friends tab" />
-            <OnboardStep n="3" text="Create a Grand Prix and race to focus together" />
-          </Card>
         )}
 
         {/* Hide session creation when one is already in progress */}

@@ -8,6 +8,7 @@ import {
   TouchableOpacity,
   Image,
 } from 'react-native';
+import { RetireModal } from '@/components/session/RetireModal';
 import * as Clipboard from 'expo-clipboard';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -46,6 +47,7 @@ export default function SessionScreen() {
 
   const [lightStage, setLightStage] = useState<LightStage>('empty');
   const [showCheckeredFlag, setShowCheckeredFlag] = useState(false);
+  const [showRetireModal, setShowRetireModal] = useState(false);
   const [pointsToast, setPointsToast] = useState<number | null>(null);
   const prevStatusRef = useRef<string | null>(null);
   const prevPhaseCountRef = useRef<number>(0);
@@ -179,7 +181,7 @@ export default function SessionScreen() {
   // ─── Back handler ─────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!session || session.status === 'completed' || session.status === 'cancelled') return;
-    const sub = BackHandler.addEventListener('hardwareBackPress', () => { showRetireAlert(); return true; });
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => { setShowRetireModal(true); return true; });
     return () => sub.remove();
   }, [session?.status]);
 
@@ -226,34 +228,25 @@ export default function SessionScreen() {
     );
   }
 
-  function showRetireAlert() {
+  // Normal retire: just go home. Session stays alive — rejoin banner appears.
+  async function handleNormalRetire() {
     if (!session || !user) return;
-    const isActive = ['active', 'paused', 'solo'].includes(session.status);
-    const body = !isActive
-      ? 'Leave this session?'
-      : isSolo
-      ? `Retiring ends your solo practice and costs ${Math.abs(POINTS_LEAVE_PENALTY)} points.`
-      : `Retiring costs you ${Math.abs(POINTS_LEAVE_PENALTY)} championship points.\nYour teammate will keep racing.`;
-    Alert.alert(
-      'Retire from Race?',
-      body,
-      [
-        { text: 'Stay in Race', style: 'cancel' },
-        {
-          text: `Retire (${POINTS_LEAVE_PENALTY} PTS)`,
-          style: 'destructive',
-          onPress: async () => {
-            if (session.status === 'waiting' && isHost) {
-              await cancelSession(session.id);
-            } else {
-              await leaveSession(session.id, user.uid, isHost);
-              setPointsToast(POINTS_LEAVE_PENALTY);
-            }
-            router.replace('/(app)');
-          },
-        },
-      ]
-    );
+    if (session.status === 'waiting' && isHost) {
+      await cancelSession(session.id);
+    }
+    router.replace('/(app)');
+  }
+
+  // Permanent retire: penalise points, added to leftParticipants, no rejoin.
+  async function handlePermanentRetire() {
+    if (!session || !user) return;
+    if (session.status === 'waiting' && isHost) {
+      await cancelSession(session.id);
+    } else {
+      await leaveSession(session.id, user.uid, isHost);
+      setPointsToast(POINTS_LEAVE_PENALTY);
+    }
+    router.replace('/(app)');
   }
 
   async function handleCopyCode() {
@@ -293,6 +286,16 @@ export default function SessionScreen() {
 
   return (
     <SafeAreaView style={styles.safe}>
+      {/* ── Retire modal ── */}
+      <RetireModal
+        visible={showRetireModal}
+        isActiveSession={['active', 'paused', 'solo'].includes(session?.status ?? '')}
+        penaltyPoints={POINTS_LEAVE_PENALTY}
+        onStay={() => setShowRetireModal(false)}
+        onNormalRetire={handleNormalRetire}
+        onPermanentRetire={handlePermanentRetire}
+      />
+
       {/* Overlays */}
       {showCheckeredFlag && (
         <CheckeredFlag
@@ -310,7 +313,7 @@ export default function SessionScreen() {
         <View style={styles.topBar}>
           <Image source={F1Assets.logo} style={styles.f1Logo} resizeMode="contain" />
           {(isActive || isPaused) && <PhaseIndicator phaseCount={timerState.phaseCount} />}
-          <TouchableOpacity onPress={showRetireAlert} style={styles.retireBtn}>
+          <TouchableOpacity onPress={() => setShowRetireModal(true)} style={styles.retireBtn}>
             <Text style={styles.retireText}>RETIRE</Text>
           </TouchableOpacity>
         </View>
