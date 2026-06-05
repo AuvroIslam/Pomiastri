@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -7,11 +7,9 @@ import {
   Alert,
   ActivityIndicator,
   BackHandler,
-  Image,
 } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import * as Clipboard from 'expo-clipboard';
 import { useAuth } from '@/hooks/useAuth';
 import { useFriends } from '@/hooks/useFriends';
 import { useSessionInvites } from '@/hooks/useSessionInvites';
@@ -27,11 +25,12 @@ import { Input } from '@/components/ui/Input';
 import { Card } from '@/components/ui/Card';
 import { FriendItem } from '@/components/friends/FriendItem';
 import { AvatarDisplay } from '@/components/avatar/AvatarDisplay';
-import { Colors, Spacing, FontSize, FontWeight, Radius } from '@/constants/theme';
-import { F1Assets } from '@/constants/drivers';
+import { Colors, Spacing, FontSize, FontWeight } from '@/constants/theme';
 import { AppLogo } from '@/components/ui/AppLogo';
-import { Friend } from '@/types';
+import { Friend, SessionInvite } from '@/types';
 import { normalizeFriendCode } from '@/utils/code';
+
+const INVITE_EXPIRY_MS = 20 * 60 * 1000; // 20 minutes
 
 export default function FriendsScreen() {
   const router = useRouter();
@@ -42,6 +41,12 @@ export default function FriendsScreen() {
   const [addLoading, setAddLoading] = useState(false);
   const [addError, setAddError] = useState('');
   const [inviteProcessing, setInviteProcessing] = useState<string | null>(null);
+  const [now, setNow] = useState(Date.now());
+
+  useEffect(() => {
+    const interval = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   useFocusEffect(
     useCallback(() => {
@@ -113,6 +118,45 @@ export default function FriendsScreen() {
     ]);
   }
 
+  function getInviteCreatedAt(invite: SessionInvite): Date | null {
+    if (!invite.createdAt) return null;
+    if (typeof (invite.createdAt as any).toDate === 'function') {
+      return (invite.createdAt as any).toDate();
+    }
+    const date = new Date(invite.createdAt as any);
+    return isNaN(date.getTime()) ? null : date;
+  }
+
+  function getInviteAgeMs(invite: SessionInvite) {
+    const createdAt = getInviteCreatedAt(invite);
+    return createdAt ? now - createdAt.getTime() : null;
+  }
+
+  function isInviteExpired(invite: SessionInvite) {
+    const ageMs = getInviteAgeMs(invite);
+    return ageMs !== null && ageMs >= INVITE_EXPIRY_MS;
+  }
+
+  function formatInviteExpiryText(invite: SessionInvite) {
+    const ageMs = getInviteAgeMs(invite);
+    if (ageMs === null) return '';
+    const remainingMs = INVITE_EXPIRY_MS - ageMs;
+    if (remainingMs <= 0) return '';
+    const minutes = Math.floor(remainingMs / 60000);
+    const seconds = Math.floor((remainingMs % 60000) / 1000);
+    if (minutes > 0) {
+      return `Expires in ${minutes}m${seconds > 0 ? ` ${seconds}s` : ''}`;
+    }
+    return `Expires in ${seconds}s`;
+  }
+
+  function formatInviteCreatedAt(invite: SessionInvite) {
+    const createdAt = getInviteCreatedAt(invite);
+    return createdAt
+      ? createdAt.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+      : '';
+  }
+
   return (
     <SafeAreaView style={styles.safe}>
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
@@ -139,38 +183,68 @@ export default function FriendsScreen() {
           </View>
         </Card>
 
+        {/* My Team */}
+        <View>
+          <Text style={styles.sectionTitle}>MY TEAM ({friends.length})</Text>
+          {loading
+            ? <ActivityIndicator color={Colors.primary} />
+            : friends.length === 0
+            ? <Text style={styles.empty}>No teammates yet. Add someone with their code.</Text>
+            : <Card>
+                {friends.map((friend, index) => (
+                  <View key={friend.uid}>
+                    {index > 0 && <View style={styles.divider} />}
+                    <FriendItem friend={friend} onRemove={handleRemove} />
+                  </View>
+                ))}
+              </Card>
+          }
+        </View>
+
         {/* Session Invites */}
         {(invites.length > 0 || invitesLoading) && (
           <View>
-            <Text style={styles.sectionTitle}>RACE INVITES</Text>
+            <Text style={styles.sectionTitle}>INVITE NOTIFICATIONS</Text>
             {invitesLoading
               ? <ActivityIndicator color={Colors.primary} />
-              : invites.map((invite) => (
-                <Card key={invite.id} style={styles.inviteCard}>
-                  <View style={styles.inviteRow}>
-                    <AvatarDisplay avatarId={invite.fromAvatarId} state="happy" size={48} animate={false} />
-                    <View style={styles.inviteInfo}>
-                      <Text style={styles.inviteName}>{invite.fromDisplayName}</Text>
-                      <Text style={styles.inviteCode}>Code: {invite.joinCode}</Text>
+              : invites.map((invite) => {
+                const expired = isInviteExpired(invite);
+                return (
+                  <Card key={invite.id} style={styles.inviteCard}>
+                    <View style={styles.inviteRow}>
+                      <AvatarDisplay avatarId={invite.fromAvatarId} state="happy" size={48} animate={false} />
+                      <View style={styles.inviteInfo}>
+                        <Text style={styles.inviteName}>{invite.fromDisplayName}</Text>
+                        <Text style={styles.inviteCode}>Code: {invite.joinCode}</Text>
+                      </View>
                     </View>
-                  </View>
-                  <View style={styles.inviteActions}>
-                    <Button
-                      label="ACCEPT"
-                      onPress={() => handleInviteResponse(invite.id, invite.joinCode, 'accepted')}
-                      loading={inviteProcessing === invite.id}
-                      size="sm"
-                      style={styles.acceptBtn}
-                    />
-                    <Button
-                      label="DECLINE"
-                      onPress={() => handleInviteResponse(invite.id, invite.joinCode, 'declined')}
-                      variant="ghost"
-                      size="sm"
-                    />
-                  </View>
-                </Card>
-              ))
+                    {expired ? (
+                      <Text style={styles.expiredText}>
+                        Invited at {formatInviteCreatedAt(invite)} — this request has expired.
+                      </Text>
+                    ) : (
+                      <>
+                        <Text style={styles.expiryText}>{formatInviteExpiryText(invite)}</Text>
+                        <View style={styles.inviteActions}>
+                          <Button
+                            label="ACCEPT"
+                            onPress={() => handleInviteResponse(invite.id, invite.joinCode, 'accepted')}
+                            loading={inviteProcessing === invite.id}
+                            size="sm"
+                            style={styles.acceptBtn}
+                          />
+                          <Button
+                            label="DECLINE"
+                            onPress={() => handleInviteResponse(invite.id, invite.joinCode, 'declined')}
+                            variant="ghost"
+                            size="sm"
+                          />
+                        </View>
+                      </>
+                    )}
+                  </Card>
+                );
+              })
             }
           </View>
         )}
@@ -196,24 +270,6 @@ export default function FriendsScreen() {
             ))}
           </View>
         )}
-
-        {/* Friends List */}
-        <View>
-          <Text style={styles.sectionTitle}>MY TEAM ({friends.length})</Text>
-          {loading
-            ? <ActivityIndicator color={Colors.primary} />
-            : friends.length === 0
-            ? <Text style={styles.empty}>No teammates yet. Add someone with their code.</Text>
-            : <Card>
-                {friends.map((friend, index) => (
-                  <View key={friend.uid}>
-                    {index > 0 && <View style={styles.divider} />}
-                    <FriendItem friend={friend} onRemove={handleRemove} />
-                  </View>
-                ))}
-              </Card>
-          }
-        </View>
       </ScrollView>
     </SafeAreaView>
   );
@@ -235,6 +291,8 @@ const styles = StyleSheet.create({
   inviteInfo: { flex: 1 },
   inviteName: { fontSize: FontSize.md, fontWeight: FontWeight.bold, color: Colors.textPrimary },
   inviteCode: { fontSize: FontSize.xs, color: Colors.primary, letterSpacing: 2 },
+  expiryText: { fontSize: FontSize.sm, color: Colors.textSecondary, lineHeight: 20, marginTop: Spacing.sm },
+  expiredText: { fontSize: FontSize.sm, color: Colors.textSecondary, lineHeight: 20, marginTop: Spacing.sm },
   inviteActions: { flexDirection: 'row', gap: Spacing.sm },
   acceptBtn: { flex: 1 },
   requestCard: { gap: Spacing.sm, marginBottom: Spacing.sm },
