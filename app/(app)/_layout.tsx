@@ -1,7 +1,7 @@
 import { Tabs } from 'expo-router';
 import { Image, ImageSourcePropType, StyleSheet } from 'react-native';
 import { Colors, FontSize } from '@/constants/theme';
-import { F1Assets, DRIVERS } from '@/constants/drivers';
+import { F1Assets } from '@/constants/drivers';
 import { useAuth } from '@/hooks/useAuth';
 import { useInviteNotifier } from '@/hooks/useInviteNotifier';
 
@@ -23,31 +23,9 @@ function TintIcon({
   );
 }
 
-/** Full-color helmet icon — use opacity instead of tint */
-function HelmetIcon({
-  source,
-  focused,
-}: {
-  source: ImageSourcePropType;
-  focused: boolean;
-}) {
-  return (
-    <Image
-      source={source}
-      style={[styles.icon, { opacity: focused ? 1 : 0.4 }]}
-      resizeMode="contain"
-    />
-  );
-}
-
 export default function AppLayout() {
-  const { user, profile } = useAuth();
+  const { user } = useAuth();
   useInviteNotifier(user?.uid);
-
-  // Show the user's own driver helmet for GARAGE — personalised tab icon
-  const helmetSrc = profile?.avatarId
-    ? DRIVERS[profile.avatarId].assets.helmet
-    : DRIVERS.charles.assets.helmet;
 
   return (
     <Tabs
@@ -101,7 +79,7 @@ export default function AppLayout() {
         options={{
           title: 'GARAGE',
           tabBarIcon: ({ focused }) => (
-            <HelmetIcon source={helmetSrc} focused={focused} />
+            <TintIcon source={F1Assets.iconHelmet} focused={focused} />
           ),
         }}
       />
