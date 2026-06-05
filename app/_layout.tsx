@@ -10,66 +10,55 @@ import { F1Assets } from '@/constants/drivers';
 
 SplashScreen.preventAutoHideAsync();
 
-// Minimum time (ms) to show our branded loading screen before navigating
-const MIN_SPLASH_MS = 2200;
+// How long to show our branded loading screen before revealing the app
+const MIN_SPLASH_MS = 2000;
 
 function RootNavigator() {
   const { user, loading } = useAuth();
-  const [splashDone, setSplashDone] = useState(false);
-  const [authDone, setAuthDone] = useState(false);
-  const [fadingOut, setFadingOut] = useState(false);
+  const [showOverlay, setShowOverlay] = useState(true);
   const fadeAnim = useRef(new Animated.Value(1)).current;
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // 1. Start the minimum-display timer as soon as the component mounts
   useEffect(() => {
-    timerRef.current = setTimeout(() => setSplashDone(true), MIN_SPLASH_MS);
-    return () => {
-      if (timerRef.current) clearTimeout(timerRef.current);
-    };
+    // Hide the native splash immediately after a short delay so the
+    // app is never stuck if Firebase is slow. Our React overlay stays
+    // on top until auth resolves AND MIN_SPLASH_MS has elapsed.
+    const nativeTimer = setTimeout(() => {
+      SplashScreen.hideAsync().catch(() => {});
+    }, 300);
+    return () => clearTimeout(nativeTimer);
   }, []);
 
-  // 2. When Firebase auth resolves, mark it done
   useEffect(() => {
-    if (!loading) setAuthDone(true);
+    if (loading) return;
+
+    // Auth resolved — wait for minimum display time then fade out
+    const delay = setTimeout(() => {
+      Animated.timing(fadeAnim, {
+        toValue: 0,
+        duration: 400,
+        useNativeDriver: true,
+      }).start(() => setShowOverlay(false));
+    }, MIN_SPLASH_MS);
+
+    return () => clearTimeout(delay);
   }, [loading]);
-
-  // 3. When BOTH are done → hide native splash, then fade out our screen
-  useEffect(() => {
-    if (!splashDone || !authDone) return;
-
-    SplashScreen.hideAsync();
-    setFadingOut(true);
-
-    Animated.timing(fadeAnim, {
-      toValue: 0,
-      duration: 400,
-      useNativeDriver: true,
-    }).start();
-  }, [splashDone, authDone]);
-
-  const showLoading = !splashDone || !authDone || fadingOut;
 
   return (
     <>
-      {/* App content — mounts underneath the loading overlay */}
-      {authDone && (
-        <>
-          <StatusBar style="light" />
-          <Stack screenOptions={{ headerShown: false, animation: 'fade' }}>
-            <Stack.Protected guard={!!user}>
-              <Stack.Screen name="(app)" />
-            </Stack.Protected>
-            <Stack.Protected guard={!user}>
-              <Stack.Screen name="(auth)" />
-            </Stack.Protected>
-          </Stack>
-        </>
-      )}
+      {/* App renders underneath the overlay */}
+      <StatusBar style="light" />
+      <Stack screenOptions={{ headerShown: false, animation: 'fade' }}>
+        <Stack.Protected guard={!!user}>
+          <Stack.Screen name="(app)" />
+        </Stack.Protected>
+        <Stack.Protected guard={!user}>
+          <Stack.Screen name="(auth)" />
+        </Stack.Protected>
+      </Stack>
 
-      {/* Loading overlay — fades out on top of the app */}
-      {showLoading && (
-        <Animated.View style={[styles.loadingContainer, { opacity: fadeAnim }]}>
+      {/* Branded loading overlay — fades out once auth + timer done */}
+      {showOverlay && (
+        <Animated.View style={[styles.overlay, { opacity: fadeAnim }]}>
           <Image source={F1Assets.logo} style={styles.logo} resizeMode="contain" />
           <AnimatedFrames
             frames={F1Assets.splashFrames}
@@ -93,7 +82,7 @@ export default function RootLayout() {
 }
 
 const styles = StyleSheet.create({
-  loadingContainer: {
+  overlay: {
     ...StyleSheet.absoluteFillObject,
     alignItems: 'center',
     justifyContent: 'center',
@@ -101,14 +90,8 @@ const styles = StyleSheet.create({
     gap: Spacing.lg,
     zIndex: 999,
   },
-  logo: {
-    width: 100,
-    height: 34,
-  },
-  splashAnim: {
-    width: 280,
-    height: 280,
-  },
+  logo: { width: 100, height: 34 },
+  splashAnim: { width: 280, height: 280 },
   loadingText: {
     fontSize: FontSize.xs,
     fontWeight: FontWeight.black,
