@@ -102,18 +102,18 @@ export function GridStartLights({ stage, onGoComplete }: GridStartLightsProps) {
 const styles = StyleSheet.create({
   container: {
     alignItems: 'center',
+    width: '100%',
   },
   lightsFrame: {
-    width: 300,
-    height: 100,
-    backgroundColor: Colors.surface,
+    width: '100%',
+    aspectRatio: 2.5,   // matches the landscape start-lights image proportion
+    backgroundColor: Colors.surfaceElevated,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: Colors.border,
     overflow: 'hidden',
   },
   image: {
-    width: 300,
-    height: 100,
+    flex: 1,
   },
 });

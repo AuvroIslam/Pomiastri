@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -18,7 +18,15 @@ import { Card } from '@/components/ui/Card';
 import { AvatarDisplay } from '@/components/avatar/AvatarDisplay';
 import { AvatarSelector } from '@/components/avatar/AvatarSelector';
 import { Colors, Spacing, FontSize, FontWeight, Radius } from '@/constants/theme';
-import { F1Assets, DriverId } from '@/constants/drivers';
+import { F1Assets, DriverId, DriverState } from '@/constants/drivers';
+
+const SHOWCASE_STATES: DriverState[] = ['idle', 'focus', 'happy', 'sad'];
+const SHOWCASE_LABELS: Record<DriverState, string> = {
+  idle: 'IDLE',
+  focus: 'FOCUSED',
+  happy: 'HAPPY',
+  sad: 'SAD',
+};
 
 export default function ProfileScreen() {
   const router = useRouter();
@@ -27,6 +35,20 @@ export default function ProfileScreen() {
   const [newName, setNewName] = useState(profile?.displayName ?? '');
   const [savingName, setSavingName] = useState(false);
   const [savingAvatar, setSavingAvatar] = useState(false);
+  const [showcaseIndex, setShowcaseIndex] = useState(0);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Cycle through avatar states on the showcase card
+  useEffect(() => {
+    intervalRef.current = setInterval(() => {
+      setShowcaseIndex((i) => (i + 1) % SHOWCASE_STATES.length);
+    }, 1800);
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
+  }, []);
+
+  const showcaseState = SHOWCASE_STATES[showcaseIndex];
 
   async function handleSaveName() {
     if (!user || !newName.trim()) return;
@@ -71,9 +93,10 @@ export default function ProfileScreen() {
           <Text style={styles.title}>GARAGE</Text>
         </View>
 
-        {/* Driver showcase */}
+        {/* Driver showcase — auto-cycles through all moods */}
         <Card elevated style={styles.showcaseCard}>
-          <AvatarDisplay avatarId={profile?.avatarId} state="idle" size={120} />
+          <AvatarDisplay avatarId={profile?.avatarId} state={showcaseState} size={150} />
+          <Text style={styles.stateLabel}>{SHOWCASE_LABELS[showcaseState]}</Text>
           {!editingName ? (
             <View style={styles.nameRow}>
               <Text style={styles.driverName}>{profile?.displayName ?? 'DRIVER'}</Text>
@@ -151,7 +174,13 @@ const styles = StyleSheet.create({
   headerBar: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md },
   f1Logo: { width: 60, height: 22 },
   title: { fontSize: FontSize.xl, fontWeight: FontWeight.black, color: Colors.textPrimary, letterSpacing: 3 },
-  showcaseCard: { alignItems: 'center', gap: Spacing.md, paddingVertical: Spacing.xl },
+  showcaseCard: { alignItems: 'center', gap: Spacing.sm, paddingVertical: Spacing.xl },
+  stateLabel: {
+    fontSize: FontSize.xs,
+    fontWeight: FontWeight.black,
+    color: Colors.primary,
+    letterSpacing: 3,
+  },
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
   driverName: { fontSize: FontSize.xxl, fontWeight: FontWeight.black, color: Colors.textPrimary, letterSpacing: 2 },
   nameEditRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, width: '100%' },

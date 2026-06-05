@@ -24,11 +24,18 @@ import { DEFAULT_SESSION_SETTINGS } from '@/constants/pomodoro';
 import { F1Assets } from '@/constants/drivers';
 import { Friend, SessionMode } from '@/types';
 
+const FOCUS_OPTIONS = [15, 25, 30, 45, 50, 60];
+const BREAK_OPTIONS = [5, 10, 15];
+const LONG_BREAK_OPTIONS = [10, 15, 20, 30];
+
 export default function CreateSessionScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ mode?: string }>();
   const { user, profile } = useAuth();
   const [mode, setMode] = useState<SessionMode>(params.mode === 'solo' ? 'solo' : 'duo');
+  const [focusMin, setFocusMin] = useState(25);
+  const [shortBreakMin, setShortBreakMin] = useState(5);
+  const [longBreakMin, setLongBreakMin] = useState(15);
   const [loading, setLoading] = useState(false);
   const [createdSessionId, setCreatedSessionId] = useState<string | null>(null);
   const [joinCode, setJoinCode] = useState<string | null>(null);
@@ -49,11 +56,16 @@ export default function CreateSessionScreen() {
     if (!user || !profile) return;
     setLoading(true);
     try {
+      const settings = {
+        focusDuration: focusMin * 60,
+        shortBreakDuration: shortBreakMin * 60,
+        longBreakDuration: longBreakMin * 60,
+      };
       const result = await createSession(
         user.uid,
         profile.displayName,
         profile.avatarId,
-        DEFAULT_SESSION_SETTINGS,
+        settings,
         mode
       );
       // Solo: skip the invite step, go straight to the track.
@@ -135,11 +147,26 @@ export default function CreateSessionScreen() {
 
             <Card style={styles.settingsCard}>
               <Text style={styles.sectionTitle}>RACE SETTINGS</Text>
-              <SettingRow label="Race Lap" value="25 min" />
+              <SettingPicker
+                label="Race Lap"
+                options={FOCUS_OPTIONS}
+                value={focusMin}
+                onChange={setFocusMin}
+              />
               <View style={styles.divider} />
-              <SettingRow label="Pit Stop" value="5 min" />
+              <SettingPicker
+                label="Pit Stop"
+                options={BREAK_OPTIONS}
+                value={shortBreakMin}
+                onChange={setShortBreakMin}
+              />
               <View style={styles.divider} />
-              <SettingRow label="Safety Car" value="15 min" />
+              <SettingPicker
+                label="Safety Car"
+                options={LONG_BREAK_OPTIONS}
+                value={longBreakMin}
+                onChange={setLongBreakMin}
+              />
             </Card>
 
             <Card style={styles.infoCard}>
@@ -195,19 +222,45 @@ export default function CreateSessionScreen() {
   );
 }
 
-function SettingRow({ label, value }: { label: string; value: string }) {
+function SettingPicker({
+  label,
+  options,
+  value,
+  onChange,
+}: {
+  label: string;
+  options: number[];
+  value: number;
+  onChange: (v: number) => void;
+}) {
+  const idx = options.indexOf(value);
+  const prev = () => onChange(options[Math.max(0, idx - 1)]);
+  const next = () => onChange(options[Math.min(options.length - 1, idx + 1)]);
+
   return (
     <View style={settingStyles.row}>
       <Text style={settingStyles.label}>{label}</Text>
-      <Text style={settingStyles.value}>{value}</Text>
+      <View style={settingStyles.picker}>
+        <TouchableOpacity onPress={prev} style={settingStyles.arrow} disabled={idx === 0}>
+          <Text style={[settingStyles.arrowText, idx === 0 && settingStyles.arrowDisabled]}>‹</Text>
+        </TouchableOpacity>
+        <Text style={settingStyles.value}>{value} min</Text>
+        <TouchableOpacity onPress={next} style={settingStyles.arrow} disabled={idx === options.length - 1}>
+          <Text style={[settingStyles.arrowText, idx === options.length - 1 && settingStyles.arrowDisabled]}>›</Text>
+        </TouchableOpacity>
+      </View>
     </View>
   );
 }
 
 const settingStyles = StyleSheet.create({
-  row: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: Spacing.xs },
+  row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: Spacing.xs },
   label: { fontSize: FontSize.md, color: Colors.textSecondary },
-  value: { fontSize: FontSize.md, fontWeight: FontWeight.bold, color: Colors.primary },
+  picker: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
+  arrow: { padding: 4 },
+  arrowText: { fontSize: 22, color: Colors.primary, fontWeight: FontWeight.bold },
+  arrowDisabled: { color: Colors.border },
+  value: { fontSize: FontSize.md, fontWeight: FontWeight.bold, color: Colors.primary, minWidth: 60, textAlign: 'center' },
 });
 
 const styles = StyleSheet.create({

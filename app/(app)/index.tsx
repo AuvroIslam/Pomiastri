@@ -76,7 +76,7 @@ export default function HomeScreen() {
             <AvatarDisplay
               avatarId={profile?.avatarId}
               state={activeSession?.status === 'active' ? 'focus' : 'idle'}
-              size={100}
+              size={130}
             />
             <View style={styles.driverInfo}>
               <Text style={styles.greeting}>{getGreeting()}</Text>
@@ -120,25 +120,28 @@ export default function HomeScreen() {
           </Card>
         )}
 
-        <View style={styles.ctaRow}>
-          <Button
-            label="CREATE GRAND PRIX"
-            onPress={() => router.push('/(app)/create-session')}
-            size="lg"
-          />
-          <Button
-            label="JOIN THE GRID"
-            onPress={() => router.push('/(app)/join-session')}
-            variant="secondary"
-            size="lg"
-          />
-          <Button
-            label="PRACTICE SOLO"
-            onPress={() => router.push({ pathname: '/(app)/create-session', params: { mode: 'solo' } })}
-            variant="ghost"
-            size="md"
-          />
-        </View>
+        {/* Hide session creation when one is already in progress */}
+        {!activeSession && (
+          <View style={styles.ctaRow}>
+            <Button
+              label="CREATE GRAND PRIX"
+              onPress={() => router.push('/(app)/create-session')}
+              size="lg"
+            />
+            <Button
+              label="JOIN THE GRID"
+              onPress={() => router.push('/(app)/join-session')}
+              variant="secondary"
+              size="lg"
+            />
+            <Button
+              label="PRACTICE SOLO"
+              onPress={() => router.push({ pathname: '/(app)/create-session', params: { mode: 'solo' } })}
+              variant="ghost"
+              size="md"
+            />
+          </View>
+        )}
 
         <View style={styles.section}>
           <View style={styles.sectionHeader}>

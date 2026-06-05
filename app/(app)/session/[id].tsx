@@ -350,7 +350,7 @@ export default function SessionScreen() {
             <AvatarDisplay
               avatarId={profile?.avatarId}
               state={myState}
-              size={isWaiting ? 140 : 110}
+              size={isWaiting ? 120 : 80}
               animate
             />
             <Text style={styles.driverLabel}>{profile?.displayName?.toUpperCase() ?? 'YOU'}</Text>
@@ -363,7 +363,7 @@ export default function SessionScreen() {
             <View style={styles.driversRow}>
               {/* My driver */}
               <View style={styles.driverCard}>
-                <AvatarDisplay avatarId={profile?.avatarId} state={myState} size={isWaiting ? 100 : 80} animate />
+                <AvatarDisplay avatarId={profile?.avatarId} state={myState} size={isWaiting ? 90 : 72} animate />
                 <Text style={styles.driverLabel}>YOU</Text>
                 <Text style={[styles.driverStatus, { color: myStateColor(myState) }]}>
                   {myStateLabel(myState, iHaveLeft)}
@@ -381,9 +381,9 @@ export default function SessionScreen() {
               {/* Teammate */}
               <View style={styles.driverCard}>
                 {partnerConnected ? (
-                  <AvatarDisplay avatarId={partnerAvatarId} state={partnerState} size={isWaiting ? 100 : 80} animate />
+                  <AvatarDisplay avatarId={partnerAvatarId} state={partnerState} size={isWaiting ? 90 : 72} animate />
                 ) : (
-                  <View style={[styles.emptySlot, { width: isWaiting ? 100 : 80, height: isWaiting ? 100 : 80 }]}>
+                  <View style={[styles.emptySlot, { width: isWaiting ? 90 : 72, height: isWaiting ? 90 : 72 }]}>
                     <Text style={styles.emptySlotText}>?</Text>
                   </View>
                 )}

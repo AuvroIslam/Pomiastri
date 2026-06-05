@@ -45,7 +45,7 @@ export function AnimatedFrames({
   if (frames.length === 0) return null;
 
   return (
-    <View style={style}>
+    <View style={[StyleSheet.absoluteFill, style]}>
       <Image
         source={frames[frameIndex]}
         style={StyleSheet.absoluteFill}
