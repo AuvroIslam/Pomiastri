@@ -93,5 +93,5 @@ export default function AppLayout() {
 }
 
 const styles = StyleSheet.create({
-  icon: { width: 30, height: 30 },
+  icon: { width: 22, height: 22 },
 });
