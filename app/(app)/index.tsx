@@ -262,9 +262,9 @@ const styles = StyleSheet.create({
   driverRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md },
   driverInfo: { flex: 1, gap: 4 },
   greeting: { fontSize: FontSize.xs, color: Colors.textMuted, letterSpacing: 1 },
-  driverName: { fontSize: FontSize.xl, fontWeight: FontWeight.black, color: Colors.textPrimary, letterSpacing: 1 },
+  driverName: { fontSize: FontSize.xxl, fontWeight: FontWeight.black, color: Colors.textPrimary, letterSpacing: 1 },
   pointsRow: { flexDirection: 'row', alignItems: 'baseline', marginTop: 4 },
-  pointsValue: { fontSize: FontSize.xxl, fontWeight: FontWeight.black, color: Colors.gold },
+  pointsValue: { fontSize: FontSize.xl, fontWeight: FontWeight.black, color: Colors.gold },
   pointsLabel: { fontSize: FontSize.sm, fontWeight: FontWeight.bold, color: Colors.textMuted },
   codeStrip: {
     flexDirection: 'row',
