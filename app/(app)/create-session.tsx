@@ -8,6 +8,7 @@ import {
   BackHandler,
   Image,
   TouchableOpacity,
+  Switch,
 } from 'react-native';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -37,6 +38,7 @@ export default function CreateSessionScreen() {
   const [focusMin, setFocusMin] = useState(25);
   const [shortBreakMin, setShortBreakMin] = useState(5);
   const [longBreakMin, setLongBreakMin] = useState(15);
+  const [stakesEnabled, setStakesEnabled] = useState(true);
   const [loading, setLoading] = useState(false);
   const [createdSessionId, setCreatedSessionId] = useState<string | null>(null);
   const [joinCode, setJoinCode] = useState<string | null>(null);
@@ -52,6 +54,7 @@ export default function CreateSessionScreen() {
       setJoinCode(null);
       setSentInvites([]);
       setMode(params.mode === 'solo' ? 'solo' : 'duo');
+      setStakesEnabled(true);
 
       const sub = BackHandler.addEventListener('hardwareBackPress', () => {
         router.replace('/(app)');
@@ -75,7 +78,8 @@ export default function CreateSessionScreen() {
         profile.displayName,
         profile.avatarId,
         settings,
-        mode
+        mode,
+        mode === 'solo' ? stakesEnabled : true
       );
       // Solo: skip the invite step, go straight to the track.
       if (mode === 'solo') {
@@ -153,6 +157,29 @@ export default function CreateSessionScreen() {
                 </Text>
               </TouchableOpacity>
             </View>
+
+            {mode === 'solo' && (
+              <Card style={styles.stakesCard}>
+                <View style={styles.stakesRow}>
+                  <View style={styles.stakesLabel}>
+                    <Text style={styles.stakesTitle}>
+                      {stakesEnabled ? 'RACE MODE — STAKES ON' : 'PRACTICE MODE — STAKES OFF'}
+                    </Text>
+                    <Text style={styles.stakesSub}>
+                      {stakesEnabled
+                        ? 'Earn points for laps completed. Leaving the app mid-race costs you points.'
+                        : 'No points gained or lost. Leaving the app has no consequence — just the clock.'}
+                    </Text>
+                  </View>
+                  <Switch
+                    value={stakesEnabled}
+                    onValueChange={setStakesEnabled}
+                    trackColor={{ false: Colors.border, true: Colors.primary }}
+                    thumbColor={Colors.textOnPrimary}
+                  />
+                </View>
+              </Card>
+            )}
 
             <Card style={styles.settingsCard}>
               <Text style={styles.sectionTitle}>RACE SETTINGS</Text>
@@ -291,6 +318,11 @@ const styles = StyleSheet.create({
   segmentText: { fontSize: FontSize.sm, fontWeight: FontWeight.black, color: Colors.textMuted, letterSpacing: 1 },
   segmentTextActive: { color: Colors.textOnPrimary },
   sectionTitle: { fontSize: FontSize.xs, fontWeight: FontWeight.black, color: Colors.textMuted, letterSpacing: 2, marginBottom: Spacing.sm },
+  stakesCard: { paddingVertical: Spacing.md },
+  stakesRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md },
+  stakesLabel: { flex: 1, gap: 4 },
+  stakesTitle: { fontSize: FontSize.sm, fontWeight: FontWeight.black, color: Colors.textPrimary, letterSpacing: 1 },
+  stakesSub: { fontSize: FontSize.xs, color: Colors.textMuted, lineHeight: 16 },
   settingsCard: { gap: Spacing.xs },
   divider: { height: 1, backgroundColor: Colors.divider },
   infoCard: { backgroundColor: Colors.surfaceElevated },

@@ -12,17 +12,25 @@ import { Colors, Spacing, FontSize, FontWeight, Radius } from '@/constants/theme
 interface RetireModalProps {
   visible: boolean;
   isActiveSession: boolean;
+  /** True solo, or a duo race where your teammate has already left — there's
+   * no one left to hand the race to, so quitting now ends it for everyone. */
+  racingAlone: boolean;
+  /** Solo practice with stakes switched off — nothing to win or lose, so the
+   * "quit now and take the hit" choice doesn't apply. */
+  stakesOff: boolean;
   penaltyPoints: number;
   onStay: () => void;
-  /** normalRetire = go home, session stays alive (can rejoin via banner) */
+  /** normalRetire = go home, session stays alive (can rejoin via banner, no penalty) */
   onNormalRetire: () => void;
-  /** permanentRetire = leaveSession() called → penalty points → no rejoin */
+  /** permanentRetire = leaveSession() called now → penalty applied → recorded as left */
   onPermanentRetire: () => void;
 }
 
 export function RetireModal({
   visible,
   isActiveSession,
+  racingAlone,
+  stakesOff,
   penaltyPoints,
   onStay,
   onNormalRetire,
@@ -59,8 +67,14 @@ export function RetireModal({
 
           {isActiveSession ? (
             <Text style={styles.body}>
-              You can go home and rejoin this race from the{' '}
-              <Text style={styles.bold}>SESSION IN PROGRESS</Text> banner on the home screen.
+              {stakesOff
+                ? 'Practice mode keeps no score — step away and pick the lap back up anytime from the SESSION IN PROGRESS banner.'
+                : (
+                  <>
+                    You can go home and rejoin this race from the{' '}
+                    <Text style={styles.bold}>SESSION IN PROGRESS</Text> banner on the home screen.
+                  </>
+                )}
             </Text>
           ) : (
             <Text style={styles.body}>
@@ -68,8 +82,8 @@ export function RetireModal({
             </Text>
           )}
 
-          {/* Permanent checkbox (only shown for active sessions) */}
-          {isActiveSession && (
+          {/* Quit-now checkbox: only meaningful when there's something at stake */}
+          {isActiveSession && !stakesOff && (
             <TouchableOpacity
               style={styles.checkRow}
               onPress={() => setPermanent((p) => !p)}
@@ -79,9 +93,11 @@ export function RetireModal({
                 {permanent && <Text style={styles.checkmark}>✓</Text>}
               </View>
               <View style={styles.checkLabel}>
-                <Text style={styles.checkTitle}>Quit permanently ({penaltyPoints} pts)</Text>
+                <Text style={styles.checkTitle}>Quit now ({penaltyPoints} pts)</Text>
                 <Text style={styles.checkSub}>
-                  Cannot rejoin. Your partner continues racing.
+                  {racingAlone
+                    ? 'This ends the race for good — there\'s no rejoining after this.'
+                    : 'Your teammate keeps racing without you. You can still climb back in later, but it costs you now.'}
                 </Text>
               </View>
             </TouchableOpacity>

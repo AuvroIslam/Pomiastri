@@ -45,7 +45,10 @@ export async function createSession(
   hostDisplayName: string,
   hostAvatarId: DriverId = DEFAULT_DRIVER,
   settings: SessionSettings = DEFAULT_SESSION_SETTINGS,
-  mode: SessionMode = 'duo'
+  mode: SessionMode = 'duo',
+  // Duo races always have stakes; this only matters (and is only
+  // surfaced in the UI) for solo practice sessions.
+  stakesEnabled: boolean = true
 ): Promise<{ sessionId: string; joinCode: string }> {
   const joinCode = generateJoinCode();
   const sessionRef = doc(collection(db, 'sessions'));
@@ -71,6 +74,7 @@ export async function createSession(
     joinCode: joinCode.toUpperCase(),
     timerState,
     settings,
+    stakesEnabled: mode === 'solo' ? stakesEnabled : true,
     leftParticipants: [],
     isBroken: false,
     hostFocusBroken: false,
@@ -138,10 +142,24 @@ export async function getSession(sessionId: string): Promise<Session | null> {
   return { id: snap.id, ...snap.data() } as Session;
 }
 
+/**
+ * Whether `uid` can still get back into this session: either they never left,
+ * or they left (grace-period timeout / abandon-with-penalty) but the session
+ * is still 'solo' and their partner hasn't also walked away. Once the partner
+ * is gone too, or the race is over, there's nothing left to rejoin.
+ */
+export function isSessionRecoverableFor(session: Session, uid: string): boolean {
+  const left = session.leftParticipants ?? [];
+  if (!left.includes(uid)) return true;
+  if (session.status !== 'solo') return false;
+  const otherUid = session.hostId === uid ? session.participantId : session.hostId;
+  return !!otherUid && !left.includes(otherUid);
+}
+
 export async function getActiveSessionForUser(uid: string): Promise<Session | null> {
   const activeStatuses = ['waiting', 'active', 'paused', 'solo'];
 
-  // Check as host — skip sessions the user has permanently retired from
+  // Check as host — skip sessions that are no longer recoverable for this user
   const hostQuery = query(
     collection(db, 'sessions'),
     where('hostId', '==', uid),
@@ -151,12 +169,12 @@ export async function getActiveSessionForUser(uid: string): Promise<Session | nu
   if (!hostSnap.empty) {
     const d = hostSnap.docs[0];
     const session = { id: d.id, ...d.data() } as Session;
-    if (!(session.leftParticipants ?? []).includes(uid)) {
+    if (isSessionRecoverableFor(session, uid)) {
       return session;
     }
   }
 
-  // Check as participant — skip if retired
+  // Check as participant — same recoverability rule
   const partQuery = query(
     collection(db, 'sessions'),
     where('participantId', '==', uid),
@@ -166,7 +184,7 @@ export async function getActiveSessionForUser(uid: string): Promise<Session | nu
   if (!partSnap.empty) {
     const d = partSnap.docs[0];
     const session = { id: d.id, ...d.data() } as Session;
-    if (!(session.leftParticipants ?? []).includes(uid)) {
+    if (isSessionRecoverableFor(session, uid)) {
       return session;
     }
   }
@@ -245,18 +263,22 @@ export async function leaveSession(
   sessionId: string,
   uid: string,
   isHost: boolean
-): Promise<void> {
+): Promise<{ penaltyApplied: boolean }> {
   const sessionRef = doc(db, 'sessions', sessionId);
   const snap = await getDoc(sessionRef);
-  if (!snap.exists()) return;
+  if (!snap.exists()) return { penaltyApplied: false };
 
   const session = snap.data() as Session;
   const otherUid = isHost ? session.participantId : session.hostId;
   const alreadyLeft = session.leftParticipants ?? [];
   const leaverName = isHost ? session.hostDisplayName : (session.participantDisplayName ?? 'Your partner');
 
-  // Penalty points
-  await addPoints(uid, POINTS_LEAVE_PENALTY);
+  // Practice-mode solo sessions (stakes off) carry no leave penalty —
+  // "no consequence" means no points lost either.
+  const stakesOff = session.mode === 'solo' && session.stakesEnabled === false;
+  if (!stakesOff) {
+    await addPoints(uid, POINTS_LEAVE_PENALTY);
+  }
 
   // If the other person already left, mark fully broken
   if (otherUid === null || alreadyLeft.includes(otherUid)) {
@@ -276,6 +298,8 @@ export async function leaveSession(
     // Notify the remaining driver
     sendPush(otherUid, 'partner_retired', leaverName, { sessionId });
   }
+
+  return { penaltyApplied: !stakesOff };
 }
 
 export async function rejoinSession(sessionId: string, uid: string): Promise<boolean> {
@@ -298,6 +322,26 @@ export async function rejoinSession(sessionId: string, uid: string): Promise<boo
 
   await updateDoc(sessionRef, updates);
   return true;
+}
+
+/**
+ * A participant backing out of a session that hasn't started yet. Nothing has
+ * been raced for, so there's no penalty and nothing to record — just free up
+ * the seat so the host can invite someone else.
+ */
+export async function leaveWaitingSession(sessionId: string, uid: string): Promise<void> {
+  const sessionRef = doc(db, 'sessions', sessionId);
+  const snap = await getDoc(sessionRef);
+  if (!snap.exists()) return;
+
+  const session = snap.data() as Session;
+  if (session.status !== 'waiting' || session.participantId !== uid) return;
+
+  await updateDoc(sessionRef, {
+    participantId: null,
+    participantDisplayName: null,
+    participantAvatarId: null,
+  });
 }
 
 export async function cancelSession(sessionId: string): Promise<void> {

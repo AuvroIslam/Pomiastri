@@ -19,8 +19,8 @@ import { useTimer } from '@/hooks/useTimer';
 import { useGracePeriod } from '@/hooks/useGracePeriod';
 import {
   startSession, pauseSession, resumeSession,
-  advancePhase, endSession, leaveSession,
-  cancelSession, saveSessionHistory, phasePointsFor,
+  advancePhase, endSession, leaveSession, rejoinSession,
+  cancelSession, leaveWaitingSession, saveSessionHistory, phasePointsFor, isSessionRecoverableFor,
   POINTS_FULL_COMPLETE, POINTS_PARTNER_LEFT_BONUS,
   POINTS_SOLO_BONUS, POINTS_LEAVE_PENALTY,
 } from '@/services/sessions';
@@ -32,6 +32,7 @@ import { AvatarDisplay } from '@/components/avatar/AvatarDisplay';
 import { GridStartLights, LightStage } from '@/components/ui/GridStartLights';
 import { CheckeredFlag } from '@/components/ui/CheckeredFlag';
 import { PointsToast } from '@/components/ui/PointsToast';
+import { NoticeToast } from '@/components/ui/NoticeToast';
 import { Colors, Spacing, FontSize, FontWeight, Radius } from '@/constants/theme';
 import { F1Assets, DriverState } from '@/constants/drivers';
 import { AppLogo } from '@/components/ui/AppLogo';
@@ -50,8 +51,11 @@ export default function SessionScreen() {
   const [showCheckeredFlag, setShowCheckeredFlag] = useState(false);
   const [showRetireModal, setShowRetireModal] = useState(false);
   const [pointsToast, setPointsToast] = useState<number | null>(null);
+  const [sessionNotice, setSessionNotice] = useState<{ message: string; tone: 'neutral' | 'warning' | 'success' } | null>(null);
   const prevStatusRef = useRef<string | null>(null);
   const prevPhaseCountRef = useRef<number>(0);
+  const prevPartnerLeftRef = useRef<boolean | null>(null);
+  const rejoinAttemptedRef = useRef(false);
 
   // Primary check: mode field. Fallback: if no participant slot and we're the
   // only one here (mode was not saved on very old sessions), treat as solo.
@@ -68,14 +72,25 @@ export default function SessionScreen() {
     ? (session.leftParticipants ?? []).includes(isHost ? (session.participantId ?? '') : session.hostId)
     : false;
   const iHaveLeft = session ? (session.leftParticipants ?? []).includes(user?.uid ?? '') : false;
+  const hostHasLeft = session ? (session.leftParticipants ?? []).includes(session.hostId) : false;
+  // Race controls (start/pause/resume/finish) normally belong to the host. But
+  // if the host abandons a duo race, the remaining driver inherits them — they
+  // would otherwise be stuck staring at a frozen timer with no way to finish.
+  const amInControl = !iHaveLeft && (isHost || hostHasLeft);
+  // True solo practice, or a duo race your partner has abandoned — either way
+  // you're the only one left, so "RETIRE" doesn't fit; it's just "FINISH".
+  const racingAlone = isSolo || session?.status === 'solo';
+
+  // Solo practice can opt out of stakes entirely — no gain, no loss.
+  const stakesOff = isSolo && session?.stakesEnabled === false;
 
   // Points derived from Firestore — same value for both users. Solo earns less.
-  const phasePts = phasePointsFor(session?.mode ?? 'duo');
+  const phasePts = stakesOff ? 0 : phasePointsFor(session?.mode ?? 'duo');
   const sessionPhasePoints = (session?.timerState.phaseCount ?? 0) * phasePts;
 
   function completionBonus(): number {
     if (!session || session.status !== 'completed') return 0;
-    if (isSolo) return POINTS_SOLO_BONUS;
+    if (isSolo) return stakesOff ? 0 : POINTS_SOLO_BONUS;
     return (session.leftParticipants?.length ?? 0) > 0
       ? POINTS_PARTNER_LEFT_BONUS
       : POINTS_FULL_COMPLETE;
@@ -89,7 +104,9 @@ export default function SessionScreen() {
     if (session.status === 'waiting') return 'idle';
     if (session.timerState.phase === 'focus' && session.timerState.isRunning) return 'focus';
     if (session.timerState.phase !== 'focus') return 'happy'; // break time
-    if (session.status === 'paused') return 'idle';
+    // 'solo' inherits whatever run state the race was in when the other driver
+    // left — if they bailed mid-pause, the timer is frozen, not focusing.
+    if (session.status === 'paused' || (session.status === 'solo' && !session.timerState.isRunning)) return 'idle';
     return 'focus';
   }
 
@@ -101,7 +118,7 @@ export default function SessionScreen() {
     if (session.status === 'waiting') return 'idle';
     if (session.timerState.phase === 'focus' && session.timerState.isRunning) return 'focus';
     if (session.timerState.phase !== 'focus') return 'happy';
-    if (session.status === 'paused') return 'idle';
+    if (session.status === 'paused' || (session.status === 'solo' && !session.timerState.isRunning)) return 'idle';
     return 'focus';
   }
 
@@ -148,16 +165,23 @@ export default function SessionScreen() {
     if (count > prevPhaseCountRef.current) {
       prevPhaseCountRef.current = count;
       if (session.timerState.phase !== 'focus') {
-        setPointsToast(phasePts);
+        // Practice mode (stakes off) still gets the completion feel — just no "+0 PTS" toast.
+        if (phasePts > 0) setPointsToast(phasePts);
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }
     }
   }, [session?.timerState.phaseCount, session?.timerState.phase]);
 
-  // ─── Host: auto-advance phase when timer hits 0 ───────────────────────────────
+  // ─── Auto-advance phase when timer hits 0 ─────────────────────────────────────
+  // Normally the host drives this. But once a duo session goes 'solo' (partner
+  // left), whoever is STILL HERE has to drive it — which might be the guest, not
+  // the host. Without this, a session abandoned by the host would freeze at 0:00
+  // forever for the remaining driver.
+  const amTimerDriver = (isSolo || session?.status === 'solo') ? !iHaveLeft : isHost;
+
   useEffect(() => {
-    if (!session || !isHost) return;
-    if (session.status !== 'active') return;
+    if (!session || !amTimerDriver) return;
+    if (session.status !== 'active' && session.status !== 'solo') return;
     if (displaySeconds > 0) { phaseAdvancedRef.current = false; return; }
     if (phaseAdvancedRef.current) return;
     phaseAdvancedRef.current = true;
@@ -166,7 +190,7 @@ export default function SessionScreen() {
     const newCount = timerState.phase === 'focus' ? timerState.phaseCount + 1 : timerState.phaseCount;
     const nextPhase = getNextPhase(timerState.phase, newCount);
     advancePhase(session.id, nextPhase, getPhaseDuration(nextPhase, settings), newCount);
-  }, [displaySeconds, session?.status, session?.timerState.phase, isHost]);
+  }, [displaySeconds, session?.status, session?.timerState.phase, amTimerDriver]);
 
   // ─── Session end handler ─────────────────────────────────────────────────────
   async function handleSessionEnd() {
@@ -191,18 +215,57 @@ export default function SessionScreen() {
   }, [session?.status]);
 
   // ─── Grace period: 10s background → leave ────────────────────────────────────
-  const handleGraceExpired = useCallback(() => {
+  const handleGraceExpired = useCallback(async () => {
     if (!session || !user) return;
     if (session.status !== 'active') return;
-    leaveSession(session.id, user.uid, isHost);
-    setPointsToast(POINTS_LEAVE_PENALTY);
-  }, [session?.id, session?.status, isHost, user?.uid]);
+    // Practice mode (stakes off): backgrounding the app has zero consequence —
+    // the clock just keeps running, exactly like the toggle promised.
+    if (stakesOff) return;
+    const { penaltyApplied } = await leaveSession(session.id, user.uid, isHost);
+    if (penaltyApplied) setPointsToast(POINTS_LEAVE_PENALTY);
+  }, [session?.id, session?.status, isHost, user?.uid, stakesOff]);
 
-  useGracePeriod(session?.status === 'active', handleGraceExpired);
+  useGracePeriod(session?.status === 'active' && !stakesOff, handleGraceExpired);
+
+  // ─── Feedback when your teammate leaves or comes back ───────────────────────
+  // Skip the very first observation (it's just establishing a baseline on
+  // mount/load) — only react to actual transitions from here on.
+  useEffect(() => {
+    if (!session || isSolo) { prevPartnerLeftRef.current = partnerHasLeft; return; }
+    const was = prevPartnerLeftRef.current;
+    if (was !== null && was !== partnerHasLeft) {
+      if (partnerHasLeft) {
+        setSessionNotice({ message: `${partnerName ?? 'Your teammate'} LEFT THE RACE — you can finish solo`, tone: 'warning' });
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      } else {
+        setSessionNotice({ message: `${partnerName ?? 'Your teammate'} IS BACK ON TRACK!`, tone: 'success' });
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
+    }
+    prevPartnerLeftRef.current = partnerHasLeft;
+  }, [session?.id, partnerHasLeft, isSolo, partnerName]);
+
+  // ─── Auto-rejoin: if I get knocked out while still looking at this screen
+  // (e.g. grace period fires while I'm right here), and the race is still
+  // salvageable, quietly bring me back in instead of stranding me on a
+  // "you retired" view with no way back short of leaving and re-entering ──────
+  useEffect(() => {
+    if (!session || !user) { rejoinAttemptedRef.current = false; return; }
+    if (!iHaveLeft) { rejoinAttemptedRef.current = false; return; }
+    if (rejoinAttemptedRef.current) return;
+    if (!isSessionRecoverableFor(session, user.uid)) return;
+    rejoinAttemptedRef.current = true;
+    rejoinSession(session.id, user.uid).then((ok) => {
+      if (ok) {
+        setSessionNotice({ message: 'BACK IN THE RACE — keep pushing!', tone: 'success' });
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
+    });
+  }, [session, user?.uid, iHaveLeft]);
 
   // ─── Controls ────────────────────────────────────────────────────────────────
   async function handleStart() {
-    if (!session || !isHost) return;
+    if (!session || !amInControl) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
     setLightStage('go');
     const sessionId = session.id;
@@ -213,21 +276,21 @@ export default function SessionScreen() {
   }
 
   async function handlePause() {
-    if (!session || !isHost) return;
+    if (!session || !amInControl) return;
     await pauseSession(session.id, displaySeconds);
   }
 
   async function handleResume() {
-    if (!session || !isHost) return;
+    if (!session || !amInControl) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     await resumeSession(session.id, displaySeconds);
   }
 
   async function handleEnd() {
-    if (!session || !isHost) return;
+    if (!session || !amInControl) return;
     Alert.alert(
       'Finish Race?',
-      isSolo ? 'End your solo practice and bank your points?' : 'This will end the session for both drivers.',
+      racingAlone ? 'End your lap and bank your points?' : 'This will end the session for both drivers.',
       [
         { text: 'Keep Going', style: 'cancel' },
         { text: 'Finish', onPress: () => endSession(session.id) },
@@ -235,23 +298,36 @@ export default function SessionScreen() {
     );
   }
 
+  // A race that hasn't started yet has nothing at stake — just unwind cleanly:
+  // the host scraps it, a guest frees up their seat. No penalty either way.
+  async function leaveBeforeStart() {
+    if (!session || !user) return;
+    if (isHost) {
+      await cancelSession(session.id);
+    } else {
+      await leaveWaitingSession(session.id, user.uid);
+    }
+  }
+
   // Normal retire: just go home. Session stays alive — rejoin banner appears.
   async function handleNormalRetire() {
     if (!session || !user) return;
-    if (session.status === 'waiting' && isHost) {
-      await cancelSession(session.id);
+    if (session.status === 'waiting') {
+      await leaveBeforeStart();
     }
     router.replace('/(app)');
   }
 
-  // Permanent retire: penalise points, added to leftParticipants, no rejoin.
+  // Permanent retire: take the leave penalty now (unless stakes are off),
+  // recorded in leftParticipants. Your teammate can keep racing without you,
+  // and you can still climb back in later as long as the race stays salvageable.
   async function handlePermanentRetire() {
     if (!session || !user) return;
-    if (session.status === 'waiting' && isHost) {
-      await cancelSession(session.id);
+    if (session.status === 'waiting') {
+      await leaveBeforeStart();
     } else {
-      await leaveSession(session.id, user.uid, isHost);
-      setPointsToast(POINTS_LEAVE_PENALTY);
+      const { penaltyApplied } = await leaveSession(session.id, user.uid, isHost);
+      if (penaltyApplied) setPointsToast(POINTS_LEAVE_PENALTY);
     }
     router.replace('/(app)');
   }
@@ -285,8 +361,11 @@ export default function SessionScreen() {
   }
 
   const { timerState, status, joinCode } = session;
-  const isActive = status === 'active' || status === 'solo';
-  const isPaused = status === 'paused';
+  // 'solo' just means "down to one driver" — it inherits whatever run state the
+  // race was in when the other person left. If they bailed mid-pause, the timer
+  // is still frozen and the remaining driver needs the Resume control, not Pause.
+  const isActive = status === 'active' || (status === 'solo' && timerState.isRunning);
+  const isPaused = status === 'paused' || (status === 'solo' && !timerState.isRunning);
   const isWaiting = status === 'waiting';
   const myState = getMyState();
   const partnerState = getPartnerState();
@@ -297,6 +376,8 @@ export default function SessionScreen() {
       <RetireModal
         visible={showRetireModal}
         isActiveSession={['active', 'paused', 'solo'].includes(session?.status ?? '')}
+        racingAlone={racingAlone}
+        stakesOff={stakesOff}
         penaltyPoints={POINTS_LEAVE_PENALTY}
         onStay={() => setShowRetireModal(false)}
         onNormalRetire={handleNormalRetire}
@@ -312,6 +393,13 @@ export default function SessionScreen() {
       )}
       {pointsToast !== null && (
         <PointsToast delta={pointsToast} onDone={() => setPointsToast(null)} />
+      )}
+      {sessionNotice && (
+        <NoticeToast
+          message={sessionNotice.message}
+          tone={sessionNotice.tone}
+          onDone={() => setSessionNotice(null)}
+        />
       )}
 
       <View style={styles.container}>
@@ -347,7 +435,9 @@ export default function SessionScreen() {
         {(isActive || isPaused) && (
           <View style={styles.pointsStrip}>
             <Text style={styles.pointsStripText}>
-              +{sessionPhasePoints} {isSolo ? 'PRACTICE' : 'CHAMPIONSHIP'} PTS THIS RACE
+              {stakesOff
+                ? 'PRACTICE LAP — NO POINTS AT STAKE'
+                : `+${sessionPhasePoints} ${isSolo ? 'PRACTICE' : 'CHAMPIONSHIP'} PTS THIS RACE`}
             </Text>
             <Text style={[styles.phaseTag, { color: timerState.phase === 'focus' ? Colors.focusAccent : Colors.shortBreakAccent }]}>
               {PHASE_LABELS[timerState.phase]}
@@ -431,7 +521,7 @@ export default function SessionScreen() {
 
         {/* ── Controls ── */}
         <View style={styles.controls}>
-          {isHost ? (
+          {amInControl ? (
             <>
               {isWaiting && (isSolo || partnerConnected) && (
                 <Button
@@ -446,13 +536,13 @@ export default function SessionScreen() {
               {isActive && (
                 <View style={styles.controlRow}>
                   <Button label="YELLOW FLAG" onPress={handlePause} variant="secondary" size="md" style={styles.halfBtn} />
-                  <Button label={isSolo ? 'FINISH' : 'RETIRE'} onPress={handleEnd} variant="ghost" size="md" style={styles.halfBtn} />
+                  <Button label={racingAlone ? 'FINISH' : 'RETIRE'} onPress={handleEnd} variant="ghost" size="md" style={styles.halfBtn} />
                 </View>
               )}
               {isPaused && (
                 <View style={styles.controlRow}>
                   <Button label="GREEN FLAG" onPress={handleResume} size="md" style={styles.halfBtn} />
-                  <Button label={isSolo ? 'FINISH' : 'RETIRE'} onPress={handleEnd} variant="ghost" size="md" style={styles.halfBtn} />
+                  <Button label={racingAlone ? 'FINISH' : 'RETIRE'} onPress={handleEnd} variant="ghost" size="md" style={styles.halfBtn} />
                 </View>
               )}
             </>

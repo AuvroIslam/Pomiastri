@@ -112,6 +112,9 @@ export interface Session {
   joinCode: string;
   timerState: TimerState;
   settings: SessionSettings;
+  // Duo races always have stakes. Solo practice can opt in/out of points
+  // (gain + leave penalty) via the toggle on the create-session screen.
+  stakesEnabled: boolean;
   leftParticipants: string[];   // UIDs who left (can rejoin)
   isBroken: boolean;
   hostFocusBroken: boolean;

@@ -1,0 +1,74 @@
+import React, { useEffect } from 'react';
+import { StyleSheet, Text } from 'react-native';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withSpring,
+  withTiming,
+  withDelay,
+  runOnJS,
+} from 'react-native-reanimated';
+import { Colors, FontSize, FontWeight, Radius, Spacing } from '@/constants/theme';
+
+interface NoticeToastProps {
+  message: string;
+  tone?: 'neutral' | 'warning' | 'success';
+  onDone: () => void;
+}
+
+const TONE_COLORS: Record<NonNullable<NoticeToastProps['tone']>, string> = {
+  neutral: Colors.textPrimary,
+  warning: Colors.primary,
+  success: Colors.success,
+};
+
+/** Short-lived banner for session-level events (partner left / rejoined, etc). */
+export function NoticeToast({ message, tone = 'neutral', onDone }: NoticeToastProps) {
+  const translateY = useSharedValue(-40);
+  const opacity = useSharedValue(0);
+
+  useEffect(() => {
+    translateY.value = withSpring(0, { damping: 12 });
+    opacity.value = withTiming(1, { duration: 200 });
+
+    opacity.value = withDelay(2200, withTiming(0, { duration: 400 }, (finished) => {
+      if (finished) runOnJS(onDone)();
+    }));
+    translateY.value = withDelay(2200, withTiming(-40, { duration: 400 }));
+  }, []);
+
+  const animStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: translateY.value }],
+    opacity: opacity.value,
+  }));
+
+  return (
+    <Animated.View style={[styles.banner, animStyle]}>
+      <Text style={[styles.text, { color: TONE_COLORS[tone] }]} numberOfLines={2}>
+        {message}
+      </Text>
+    </Animated.View>
+  );
+}
+
+const styles = StyleSheet.create({
+  banner: {
+    position: 'absolute',
+    alignSelf: 'center',
+    top: 16,
+    maxWidth: '88%',
+    backgroundColor: Colors.surfaceElevated,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.sm,
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    zIndex: 60,
+  },
+  text: {
+    fontSize: FontSize.sm,
+    fontWeight: FontWeight.bold,
+    letterSpacing: 0.3,
+    textAlign: 'center',
+  },
+});
