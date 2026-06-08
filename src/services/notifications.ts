@@ -1,12 +1,17 @@
-import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
 import { updatePushToken } from './users';
 
-// expo-notifications throws warnOfExpoGoPushUsage when loaded inside Expo Go.
-// Guard everything so it only runs in a real dev/production build.
+// expo-notifications throws warnOfExpoGoPushUsage the moment its module is
+// loaded inside Expo Go (SDK 53+ removed push support there) — a *static*
+// import runs that side effect before any of our guards. So we only `require`
+// it in a real dev/production build; in Expo Go it stays null and every entry
+// point below no-ops.
 const isExpoGo = Constants.appOwnership === 'expo';
+const Notifications: typeof import('expo-notifications') | null = isExpoGo
+  ? null
+  : require('expo-notifications');
 
-if (!isExpoGo) {
+if (Notifications) {
   Notifications.setNotificationHandler({
     handleNotification: async () => ({
       shouldShowAlert: true,
@@ -21,7 +26,7 @@ if (!isExpoGo) {
 // ─── Token registration ───────────────────────────────────────────────────────
 
 export async function registerForPushNotifications(uid: string): Promise<string | null> {
-  if (isExpoGo) return null; // not supported in Expo Go
+  if (!Notifications) return null; // not supported in Expo Go
 
   const { status: existingStatus } = await Notifications.getPermissionsAsync();
   let finalStatus = existingStatus;
@@ -58,7 +63,7 @@ export async function registerForPushNotifications(uid: string): Promise<string 
 // ─── Local notification ───────────────────────────────────────────────────────
 
 export async function sendLocalNotification(title: string, body: string): Promise<void> {
-  if (isExpoGo) return;
+  if (!Notifications) return;
   await Notifications.scheduleNotificationAsync({
     content: { title, body, sound: true },
     trigger: null,

@@ -67,6 +67,7 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.sm,
     borderWidth: 2,
     borderColor: Colors.border,
+    overflow: 'hidden',
   },
   cardSelected: {
     borderColor: Colors.primary,
@@ -82,12 +83,14 @@ const styles = StyleSheet.create({
   portraitFrameSelected: {
     backgroundColor: Colors.background,
   },
+  // Fixed-pixel sizing + negative margins (normal flow), NOT percentage-based
+  // absolute positioning — Android's overflow:hidden only reliably clips the
+  // former, so the zoomed image stays inside the frame instead of spilling out.
   portraitImage: {
-    position: 'absolute',
-    width: `${FACE_ZOOM * 100}%`,
-    height: `${FACE_ZOOM * 100}%`,
-    left: `${FACE_OFFSET_X * 100}%`,
-    top: `${FACE_OFFSET_Y * 100}%`,
+    width: PORTRAIT_SIZE * FACE_ZOOM,
+    height: PORTRAIT_SIZE * FACE_ZOOM,
+    marginLeft: PORTRAIT_SIZE * FACE_OFFSET_X,
+    marginTop: PORTRAIT_SIZE * FACE_OFFSET_Y,
   },
   name: {
     fontSize: FontSize.xs,
