@@ -248,8 +248,8 @@ const styles = StyleSheet.create({
   f1Logo: { width: 60, height: 22 },
   title: { fontSize: FontSize.xl, fontWeight: FontWeight.black, color: Colors.textPrimary, letterSpacing: 3 },
   showcaseCard: { alignItems: 'center', gap: Spacing.sm, paddingVertical: Spacing.xl },
-  nameRow: { alignItems: 'center', justifyContent: 'center', width: '100%', gap: Spacing.sm },
-  nameInner: { flex: 1, maxWidth: '75%' },
+  nameRow: { alignItems: 'center', justifyContent: 'center', width: '100%', gap: Spacing.sm, flexDirection: 'row' },
+  nameInner: { maxWidth: '75%' },
   editIconBtn: {
     width: 32,
     height: 32,
@@ -258,7 +258,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderWidth: 1.5,
     borderColor: Colors.border,
-    flexShrink: 0,
   },
   driverName: {
     fontSize: FontSize.xxl,
