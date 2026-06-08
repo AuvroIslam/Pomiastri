@@ -153,14 +153,14 @@ export default function ProfileScreen() {
                 <Text style={styles.driverName} numberOfLines={1}>
                   {profile?.displayName ?? 'DRIVER'}
                 </Text>
-                <TouchableOpacity
-                  onPress={() => { setEditingName(true); setNewName(profile?.displayName ?? ''); }}
-                  style={styles.editIconBtn}
-                  hitSlop={8}
-                >
-                  <Feather name="edit-2" size={16} color={Colors.textSecondary} />
-                </TouchableOpacity>
               </View>
+              <TouchableOpacity
+                onPress={() => { setEditingName(true); setNewName(profile?.displayName ?? ''); }}
+                style={styles.editIconBtn}
+                hitSlop={8}
+              >
+                <Feather name="edit-2" size={16} color={Colors.textSecondary} />
+              </TouchableOpacity>
             </View>
           ) : (
             <View style={styles.nameEditRow}>
@@ -248,17 +248,9 @@ const styles = StyleSheet.create({
   f1Logo: { width: 60, height: 22 },
   title: { fontSize: FontSize.xl, fontWeight: FontWeight.black, color: Colors.textPrimary, letterSpacing: 3 },
   showcaseCard: { alignItems: 'center', gap: Spacing.sm, paddingVertical: Spacing.xl },
-  nameRow: { alignItems: 'center', width: '100%' },
-  // Shrink-wraps to the name's width so it stays centred in nameRow;
-  // the edit button is anchored just outside it via absolute positioning,
-  // so it doesn't pull the name off-centre.
-  nameInner: { maxWidth: '76%' },
+  nameRow: { alignItems: 'center', justifyContent: 'center', width: '100%', gap: Spacing.sm },
+  nameInner: { flex: 1, maxWidth: '75%' },
   editIconBtn: {
-    position: 'absolute',
-    left: '100%',
-    top: '50%',
-    marginLeft: Spacing.sm,
-    transform: [{ translateY: -16 }],
     width: 32,
     height: 32,
     borderRadius: Radius.full,
@@ -266,6 +258,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderWidth: 1.5,
     borderColor: Colors.border,
+    flexShrink: 0,
   },
   driverName: {
     fontSize: FontSize.xxl,
