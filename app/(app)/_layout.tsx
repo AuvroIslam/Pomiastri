@@ -1,5 +1,5 @@
 import { Tabs } from 'expo-router';
-import { Image, ImageSourcePropType, StyleSheet } from 'react-native';
+import { ActivityIndicator, Image, ImageSourcePropType, StyleSheet, View } from 'react-native';
 import { Colors, FontSize } from '@/constants/theme';
 import { F1Assets } from '@/constants/drivers';
 import { useAuth } from '@/hooks/useAuth';
@@ -24,8 +24,20 @@ function TintIcon({
 }
 
 export default function AppLayout() {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   useInviteNotifier(user?.uid);
+
+  // Right after signup the auth account exists a beat before its Firestore
+  // profile doc is written (AuthContext retries the read). Hold the tabs back
+  // until the profile is in hand — otherwise the screens mount on default
+  // values and briefly flash the wrong driver / "------" friend code.
+  if (user && !profile) {
+    return (
+      <View style={styles.loading}>
+        <ActivityIndicator size="large" color={Colors.primary} />
+      </View>
+    );
+  }
 
   return (
     <Tabs
@@ -94,4 +106,10 @@ export default function AppLayout() {
 
 const styles = StyleSheet.create({
   icon: { width: 22, height: 22 },
+  loading: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.background,
+  },
 });

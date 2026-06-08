@@ -30,9 +30,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const loadProfile = useCallback(async (uid: string) => {
+  const loadProfile = useCallback(async (uid: string, retries = 6) => {
     try {
       const p = await getUserProfile(uid);
+      // On a brand-new signup, onAuthStateChanged fires the instant the auth
+      // account is created — which is *before* registerUser has finished writing
+      // the Firestore profile doc. Reading it now returns null, and without a
+      // retry the app would strand the user on default values (Charles avatar,
+      // "------" friend code, 0 pts). Back off briefly and try again until the
+      // doc lands.
+      if (!p && retries > 0) {
+        await new Promise((r) => setTimeout(r, 400));
+        return loadProfile(uid, retries - 1);
+      }
       setProfile(p);
     } catch {
       setProfile(null);
