@@ -14,9 +14,10 @@ import { registerUser } from '@/services/auth';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { AvatarSelector } from '@/components/avatar/AvatarSelector';
+import { AvatarDisplay } from '@/components/avatar/AvatarDisplay';
 import { Colors, Spacing, FontSize, FontWeight, Radius } from '@/constants/theme';
 import { AppLogo } from '@/components/ui/AppLogo';
-import { DriverId, DEFAULT_DRIVER, F1Assets } from '@/constants/drivers';
+import { DriverId, DRIVERS, DEFAULT_DRIVER } from '@/constants/drivers';
 
 type Step = 'credentials' | 'avatar';
 
@@ -114,7 +115,20 @@ export default function SignupScreen() {
             <Text style={styles.avatarHint}>
               Your driver avatar will represent you in sessions and the leaderboard.
             </Text>
+            <View style={styles.carPreview}>
+              <Text style={styles.carPreviewLabel}>
+                {DRIVERS[avatarId].name.toUpperCase()}'S CAR
+              </Text>
+              <AvatarDisplay
+                key={avatarId}
+                avatarId={avatarId}
+                state="car"
+                size={190}
+              />
+            </View>
+
             <AvatarSelector selected={avatarId} onSelect={setAvatarId} />
+
             {error ? <Text style={styles.error}>{error}</Text> : null}
             <View style={styles.buttonRow}>
               <Button
@@ -205,6 +219,13 @@ const styles = StyleSheet.create({
     color: Colors.primary,
     textAlign: 'center',
     fontWeight: FontWeight.medium,
+  },
+  carPreview: { alignItems: 'center', gap: Spacing.xs, marginBottom: -26 },
+  carPreviewLabel: {
+    fontSize: FontSize.xs,
+    fontWeight: FontWeight.black,
+    color: Colors.textMuted,
+    letterSpacing: 2,
   },
   buttonRow: { flexDirection: 'row', gap: Spacing.sm },
   backBtn: { flex: 1 },

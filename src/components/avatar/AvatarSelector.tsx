@@ -1,9 +1,9 @@
 import React from 'react';
 import {
-  View,
-  Text,
   Image,
+  Text,
   TouchableOpacity,
+  View,
   StyleSheet,
   FlatList,
 } from 'react-native';
@@ -14,6 +14,14 @@ interface AvatarSelectorProps {
   selected: DriverId;
   onSelect: (id: DriverId) => void;
 }
+
+const PORTRAIT_SIZE = 76;
+
+// Portraits sit centred in their canvas with the head around ~35% down.
+// Scaling up and shifting the crop keeps just the face/head in frame.
+const FACE_ZOOM = 2.2;
+const FACE_OFFSET_X = -0.6;
+const FACE_OFFSET_Y = -0.27;
 
 export function AvatarSelector({ selected, onSelect }: AvatarSelectorProps) {
   return (
@@ -31,7 +39,13 @@ export function AvatarSelector({ selected, onSelect }: AvatarSelectorProps) {
             style={[styles.card, isSelected && styles.cardSelected]}
             activeOpacity={0.7}
           >
-            <Image source={item.assets.idle} style={styles.image} resizeMode="contain" />
+            <View style={[styles.portraitFrame, isSelected && styles.portraitFrameSelected]}>
+              <Image
+                source={item.assets.idle}
+                style={styles.portraitImage}
+                resizeMode="contain"
+              />
+            </View>
             <Text style={[styles.name, isSelected && styles.nameSelected]}>
               {item.name}
             </Text>
@@ -58,7 +72,23 @@ const styles = StyleSheet.create({
     borderColor: Colors.primary,
     backgroundColor: Colors.surfaceElevated,
   },
-  image: { width: 56, height: 56 },
+  portraitFrame: {
+    width: PORTRAIT_SIZE,
+    height: PORTRAIT_SIZE,
+    borderRadius: Radius.md,
+    overflow: 'hidden',
+    backgroundColor: Colors.surfaceElevated,
+  },
+  portraitFrameSelected: {
+    backgroundColor: Colors.background,
+  },
+  portraitImage: {
+    position: 'absolute',
+    width: `${FACE_ZOOM * 100}%`,
+    height: `${FACE_ZOOM * 100}%`,
+    left: `${FACE_OFFSET_X * 100}%`,
+    top: `${FACE_OFFSET_Y * 100}%`,
+  },
   name: {
     fontSize: FontSize.xs,
     color: Colors.textSecondary,
