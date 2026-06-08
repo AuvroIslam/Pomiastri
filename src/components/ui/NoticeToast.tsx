@@ -5,7 +5,6 @@ import Animated, {
   useAnimatedStyle,
   withSpring,
   withTiming,
-  withDelay,
   runOnJS,
 } from 'react-native-reanimated';
 import { Colors, FontSize, FontWeight, Radius, Spacing } from '@/constants/theme';
@@ -28,13 +27,21 @@ export function NoticeToast({ message, tone = 'neutral', onDone }: NoticeToastPr
   const opacity = useSharedValue(0);
 
   useEffect(() => {
+    // Slide in + fade in
     translateY.value = withSpring(0, { damping: 12 });
     opacity.value = withTiming(1, { duration: 200 });
 
-    opacity.value = withDelay(3500, withTiming(0, { duration: 400 }, (finished) => {
-      if (finished) runOnJS(onDone)();
-    }));
-    translateY.value = withDelay(3500, withTiming(-40, { duration: 400 }));
+    // After 3500ms, slide out + fade out. Using setTimeout so the hide
+    // animations don't cancel the show animations (Reanimated 3 cancels any
+    // running animation when you reassign a shared value).
+    const hideTimer = setTimeout(() => {
+      translateY.value = withTiming(-40, { duration: 400 });
+      opacity.value = withTiming(0, { duration: 400 }, (finished) => {
+        if (finished) runOnJS(onDone)();
+      });
+    }, 3500);
+
+    return () => clearTimeout(hideTimer);
   }, []);
 
   const animStyle = useAnimatedStyle(() => ({
