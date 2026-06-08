@@ -14,7 +14,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useLeaderboard } from '@/hooks/useLeaderboard';
 import { useNotifications } from '@/hooks/useNotifications';
 import { logoutUser } from '@/services/auth';
-import { getActiveSessionForUser, rejoinSession } from '@/services/sessions';
+import { getActiveSessionForUser } from '@/services/sessions';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { AvatarDisplay } from '@/components/avatar/AvatarDisplay';
@@ -52,13 +52,10 @@ export default function HomeScreen() {
     }, [user?.uid])
   );
 
-  async function handleRejoinPress() {
+  function handleRejoinPress() {
     if (!activeSession || !user) return;
-    // If you'd previously been knocked out (grace-period timeout / abandon),
-    // clear that flag and restore the race before walking back in.
-    if ((activeSession.leftParticipants ?? []).includes(user.uid)) {
-      await rejoinSession(activeSession.id, user.uid);
-    }
+    // DNF is permanent, so the banner only ever shows for a race we still have a
+    // live seat in — just walk back in.
     router.push(`/(app)/session/${activeSession.id}`);
   }
 
@@ -138,11 +135,7 @@ export default function HomeScreen() {
             <Image source={F1Assets.checkedFlag} style={styles.rejoinFlag} resizeMode="contain" />
             <View>
               <Text style={styles.rejoinTitle}>SESSION IN PROGRESS</Text>
-              <Text style={styles.rejoinSub}>
-                {(activeSession.leftParticipants ?? []).includes(user?.uid ?? '')
-                  ? 'Tap to rejoin — you left this race'
-                  : 'Tap to rejoin the race'}
-              </Text>
+              <Text style={styles.rejoinSub}>Tap to rejoin the race</Text>
             </View>
             <Text style={styles.rejoinArrow}>›</Text>
           </TouchableOpacity>

@@ -115,10 +115,13 @@ export interface Session {
   // Duo races always have stakes. Solo practice can opt in/out of points
   // (gain + leave penalty) via the toggle on the create-session screen.
   stakesEnabled: boolean;
-  leftParticipants: string[];   // UIDs who left (can rejoin)
+  leftParticipants: string[];   // UIDs who left — DNF is final, no rejoin
   isBroken: boolean;
   hostFocusBroken: boolean;
   participantFocusBroken: boolean;
+  // App-switch strikes per driver. 3rd switch during a focus phase = auto-DNF.
+  hostSwitchCount: number;
+  participantSwitchCount: number;
   hostPointsEarned: number;
   participantPointsEarned: number;
   createdAt: Timestamp;

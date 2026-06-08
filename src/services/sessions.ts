@@ -13,7 +13,7 @@ import {
   Unsubscribe,
   addDoc,
   arrayUnion,
-  arrayRemove,
+  increment,
 } from 'firebase/firestore';
 import { db } from './firebase';
 import { Session, SessionInvite, SessionMode, SessionSettings, TimerState, PomodoroPhase } from '@/types';
@@ -33,6 +33,9 @@ export const POINTS_SOLO_PHASE = 5;          // per focus lap, solo
 export const POINTS_SOLO_BONUS = 15;         // solo practice finished
 // Shared
 export const POINTS_LEAVE_PENALTY = -20;
+// App-switch strikes — small hit per switch, DNF on the 3rd
+export const POINTS_SWITCH_PENALTY = -5;
+export const MAX_SWITCHES = 3; // 3rd switch during a focus phase = auto-DNF
 
 export function phasePointsFor(mode: SessionMode): number {
   return mode === 'solo' ? POINTS_SOLO_PHASE : POINTS_PER_PHASE;
@@ -79,6 +82,8 @@ export async function createSession(
     isBroken: false,
     hostFocusBroken: false,
     participantFocusBroken: false,
+    hostSwitchCount: 0,
+    participantSwitchCount: 0,
     hostPointsEarned: 0,
     participantPointsEarned: 0,
     createdAt: serverTimestamp() as any,
@@ -143,17 +148,12 @@ export async function getSession(sessionId: string): Promise<Session | null> {
 }
 
 /**
- * Whether `uid` can still get back into this session: either they never left,
- * or they left (grace-period timeout / abandon-with-penalty) but the session
- * is still 'solo' and their partner hasn't also walked away. Once the partner
- * is gone too, or the race is over, there's nothing left to rejoin.
+ * Whether `uid` still has a live seat in this session. Leaving is now a
+ * permanent DNF, so once a driver is in `leftParticipants` they're out for
+ * good — no rejoin, and no "session in progress" banner back home.
  */
 export function isSessionRecoverableFor(session: Session, uid: string): boolean {
-  const left = session.leftParticipants ?? [];
-  if (!left.includes(uid)) return true;
-  if (session.status !== 'solo') return false;
-  const otherUid = session.hostId === uid ? session.participantId : session.hostId;
-  return !!otherUid && !left.includes(otherUid);
+  return !(session.leftParticipants ?? []).includes(uid);
 }
 
 export async function getActiveSessionForUser(uid: string): Promise<Session | null> {
@@ -259,16 +259,18 @@ export async function endSession(sessionId: string): Promise<void> {
 
 // ─── Leave / Rejoin ───────────────────────────────────────────────────────────
 
-export async function leaveSession(
-  sessionId: string,
+/**
+ * The DNF body, shared by a manual leave and a 3rd-strike auto-DNF. Applies the
+ * -20 leave penalty (unless practice/stakes-off), records the driver in
+ * `leftParticipants`, and either hands the race to the remaining solo driver or
+ * — if the other has already gone — marks the race finished (`broken`).
+ */
+async function applyDnf(
+  sessionRef: ReturnType<typeof doc>,
+  session: Session,
   uid: string,
   isHost: boolean
 ): Promise<{ penaltyApplied: boolean }> {
-  const sessionRef = doc(db, 'sessions', sessionId);
-  const snap = await getDoc(sessionRef);
-  if (!snap.exists()) return { penaltyApplied: false };
-
-  const session = snap.data() as Session;
   const otherUid = isHost ? session.participantId : session.hostId;
   const alreadyLeft = session.leftParticipants ?? [];
   const leaverName = isHost ? session.hostDisplayName : (session.participantDisplayName ?? 'Your partner');
@@ -280,7 +282,7 @@ export async function leaveSession(
     await addPoints(uid, POINTS_LEAVE_PENALTY);
   }
 
-  // If the other person already left, mark fully broken
+  // If the other person already left, the race is finished — both are out.
   if (otherUid === null || alreadyLeft.includes(otherUid)) {
     await updateDoc(sessionRef, {
       status: 'broken',
@@ -296,32 +298,73 @@ export async function leaveSession(
       leftParticipants: arrayUnion(uid),
     });
     // Notify the remaining driver
-    sendPush(otherUid, 'partner_retired', leaverName, { sessionId });
+    sendPush(otherUid, 'partner_retired', leaverName, { sessionId: session.id });
   }
 
   return { penaltyApplied: !stakesOff };
 }
 
-export async function rejoinSession(sessionId: string, uid: string): Promise<boolean> {
+export async function leaveSession(
+  sessionId: string,
+  uid: string,
+  isHost: boolean
+): Promise<{ penaltyApplied: boolean }> {
   const sessionRef = doc(db, 'sessions', sessionId);
   const snap = await getDoc(sessionRef);
-  if (!snap.exists()) return false;
+  if (!snap.exists()) return { penaltyApplied: false };
 
-  const session = snap.data() as Session;
-  const validStatuses: string[] = ['solo', 'active', 'paused', 'waiting'];
-  if (!validStatuses.includes(session.status)) return false;
+  const session = { id: snap.id, ...snap.data() } as Session;
+  return applyDnf(sessionRef, session, uid, isHost);
+}
 
-  const updates: Record<string, any> = {
-    leftParticipants: arrayRemove(uid),
-  };
+/**
+ * Record an app-switch strike. Each switch during a live focus phase costs a
+ * small penalty; the 3rd switch is an automatic, permanent DNF. The partner is
+ * informed through the realtime `*SwitchCount` / `leftParticipants` change.
+ * No-ops outside a focus phase, when paused, or in stakes-off practice.
+ */
+export async function recordAppSwitch(
+  sessionId: string,
+  uid: string,
+  isHost: boolean
+): Promise<{ count: number; dnf: boolean }> {
+  const sessionRef = doc(db, 'sessions', sessionId);
+  const snap = await getDoc(sessionRef);
+  if (!snap.exists()) return { count: 0, dnf: false };
 
-  // If solo and this person is rejoining, go back to active/paused
-  if (session.status === 'solo') {
-    updates.status = session.timerState.isRunning ? 'active' : 'paused';
+  const session = { id: snap.id, ...snap.data() } as Session;
+  const stakesOff = session.mode === 'solo' && session.stakesEnabled === false;
+  if (stakesOff) return { count: 0, dnf: false };
+  if (session.status !== 'active' || session.timerState.phase !== 'focus') {
+    return { count: 0, dnf: false };
+  }
+  // Already DNF'd? nothing more to count.
+  if ((session.leftParticipants ?? []).includes(uid)) {
+    return { count: 0, dnf: false };
   }
 
-  await updateDoc(sessionRef, updates);
-  return true;
+  const prevCount = isHost ? (session.hostSwitchCount ?? 0) : (session.participantSwitchCount ?? 0);
+  const newCount = prevCount + 1;
+  const countField = isHost ? 'hostSwitchCount' : 'participantSwitchCount';
+  const brokenField = isHost ? 'hostFocusBroken' : 'participantFocusBroken';
+
+  // Always record the strike + flip the "focus broken" flag (drives the
+  // partner's realtime toast and the sad avatar state).
+  await updateDoc(sessionRef, {
+    [countField]: increment(1),
+    [brokenField]: true,
+    'timerState.lastUpdatedAt': serverTimestamp(),
+  });
+
+  if (newCount >= MAX_SWITCHES) {
+    // 3rd strike — permanent DNF (the -20 leave penalty stands in for this
+    // strike's hit; no extra -5 on top).
+    await applyDnf(sessionRef, session, uid, isHost);
+    return { count: newCount, dnf: true };
+  }
+
+  await addPoints(uid, POINTS_SWITCH_PENALTY);
+  return { count: newCount, dnf: false };
 }
 
 /**

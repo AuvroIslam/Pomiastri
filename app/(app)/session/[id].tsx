@@ -16,13 +16,13 @@ import * as Haptics from 'expo-haptics';
 import { useAuth } from '@/hooks/useAuth';
 import { useSession } from '@/hooks/useSession';
 import { useTimer } from '@/hooks/useTimer';
-import { useGracePeriod } from '@/hooks/useGracePeriod';
+import { useAppSwitchPenalty } from '@/hooks/useAppSwitchPenalty';
 import {
   startSession, pauseSession, resumeSession,
-  advancePhase, endSession, leaveSession, rejoinSession,
-  cancelSession, leaveWaitingSession, saveSessionHistory, phasePointsFor, isSessionRecoverableFor,
+  advancePhase, endSession, leaveSession, recordAppSwitch,
+  cancelSession, leaveWaitingSession, saveSessionHistory, phasePointsFor,
   POINTS_FULL_COMPLETE, POINTS_PARTNER_LEFT_BONUS,
-  POINTS_SOLO_BONUS, POINTS_LEAVE_PENALTY,
+  POINTS_SOLO_BONUS, POINTS_LEAVE_PENALTY, POINTS_SWITCH_PENALTY, MAX_SWITCHES,
 } from '@/services/sessions';
 import { recordSessionCompletion } from '@/services/users';
 import { TimerDisplay } from '@/components/ui/TimerDisplay';
@@ -55,7 +55,8 @@ export default function SessionScreen() {
   const prevStatusRef = useRef<string | null>(null);
   const prevPhaseCountRef = useRef<number>(0);
   const prevPartnerLeftRef = useRef<boolean | null>(null);
-  const rejoinAttemptedRef = useRef(false);
+  const prevPartnerSwitchRef = useRef<number | null>(null);
+  const exitedRef = useRef(false);
 
   // Primary check: mode field. Fallback: if no participant slot and we're the
   // only one here (mode was not saved on very old sessions), treat as solo.
@@ -68,6 +69,7 @@ export default function SessionScreen() {
   const partnerConnected = isHost ? !!session?.participantId : !!session?.hostId;
   const myFocusBroken = isHost ? session?.hostFocusBroken : session?.participantFocusBroken;
   const partnerFocusBroken = isHost ? session?.participantFocusBroken : session?.hostFocusBroken;
+  const partnerSwitchCount = isHost ? (session?.participantSwitchCount ?? 0) : (session?.hostSwitchCount ?? 0);
   const partnerHasLeft = session
     ? (session.leftParticipants ?? []).includes(isHost ? (session.participantId ?? '') : session.hostId)
     : false;
@@ -214,18 +216,24 @@ export default function SessionScreen() {
     return () => sub.remove();
   }, [session?.status]);
 
-  // ─── Grace period: 10s background → leave ────────────────────────────────────
-  const handleGraceExpired = useCallback(async () => {
+  // ─── App-switch strikes: every background during a focus phase costs points;
+  // the 3rd is an automatic DNF. Practice mode (stakes off) is exempt. ──────────
+  const handleAppSwitch = useCallback(async () => {
     if (!session || !user) return;
-    if (session.status !== 'active') return;
-    // Practice mode (stakes off): backgrounding the app has zero consequence —
-    // the clock just keeps running, exactly like the toggle promised.
-    if (stakesOff) return;
-    const { penaltyApplied } = await leaveSession(session.id, user.uid, isHost);
-    if (penaltyApplied) setPointsToast(POINTS_LEAVE_PENALTY);
-  }, [session?.id, session?.status, isHost, user?.uid, stakesOff]);
+    const { count, dnf } = await recordAppSwitch(session.id, user.uid, isHost);
+    if (dnf) {
+      setPointsToast(POINTS_LEAVE_PENALTY);      // -20, auto-DNF
+    } else if (count > 0) {
+      setPointsToast(POINTS_SWITCH_PENALTY);     // -5 strike
+    }
+  }, [session?.id, user?.uid, isHost]);
 
-  useGracePeriod(session?.status === 'active' && !stakesOff, handleGraceExpired);
+  useAppSwitchPenalty(
+    session?.status === 'active' &&
+      session?.timerState.phase === 'focus' &&
+      !stakesOff,
+    handleAppSwitch
+  );
 
   // ─── Feedback when your teammate leaves or comes back ───────────────────────
   // Skip the very first observation (it's just establishing a baseline on
@@ -245,23 +253,31 @@ export default function SessionScreen() {
     prevPartnerLeftRef.current = partnerHasLeft;
   }, [session?.id, partnerHasLeft, isSolo, partnerName]);
 
-  // ─── Auto-rejoin: if I get knocked out while still looking at this screen
-  // (e.g. grace period fires while I'm right here), and the race is still
-  // salvageable, quietly bring me back in instead of stranding me on a
-  // "you retired" view with no way back short of leaving and re-entering ──────
+  // ─── Feedback when your teammate switches away (app-switch strike) ───────────
+  // Watches the partner's switch counter; each increment is a fresh strike.
   useEffect(() => {
-    if (!session || !user) { rejoinAttemptedRef.current = false; return; }
-    if (!iHaveLeft) { rejoinAttemptedRef.current = false; return; }
-    if (rejoinAttemptedRef.current) return;
-    if (!isSessionRecoverableFor(session, user.uid)) return;
-    rejoinAttemptedRef.current = true;
-    rejoinSession(session.id, user.uid).then((ok) => {
-      if (ok) {
-        setSessionNotice({ message: 'BACK IN THE RACE — keep pushing!', tone: 'success' });
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      }
-    });
-  }, [session, user?.uid, iHaveLeft]);
+    if (!session || isSolo) { prevPartnerSwitchRef.current = partnerSwitchCount; return; }
+    const was = prevPartnerSwitchRef.current;
+    // The 3rd strike is a DNF — let the "LEFT THE RACE" toast carry that one so
+    // the two don't clobber each other. Only warn on the non-fatal strikes.
+    if (was !== null && partnerSwitchCount > was && partnerSwitchCount < MAX_SWITCHES) {
+      setSessionNotice({
+        message: `${partnerName ?? 'Your teammate'} SWITCHED AWAY — STRIKE ${partnerSwitchCount}/${MAX_SWITCHES}`,
+        tone: 'warning',
+      });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+    }
+    prevPartnerSwitchRef.current = partnerSwitchCount;
+  }, [session?.id, partnerSwitchCount, isSolo, partnerName]);
+
+  // ─── Auto-exit on DNF: leaving is permanent now. The moment I'm marked as
+  // having left — whether by tapping LEAVE or by a 3rd app-switch strike fired
+  // while I was backgrounded — send me home. ───────────────────────────────────
+  useEffect(() => {
+    if (!session || !user || !iHaveLeft || exitedRef.current) return;
+    exitedRef.current = true;
+    router.replace('/(app)');
+  }, [session?.id, user?.uid, iHaveLeft]);
 
   // ─── Controls ────────────────────────────────────────────────────────────────
   async function handleStart() {
@@ -309,27 +325,26 @@ export default function SessionScreen() {
     }
   }
 
-  // Normal retire: just go home. Session stays alive — rejoin banner appears.
-  async function handleNormalRetire() {
+  // Single leave action. Leaving is permanent now (DNF):
+  //  • Not started yet → just unwind cleanly, no penalty.
+  //  • Only driver left (solo / partner already gone) → "leaving" == finishing,
+  //    so bank the lap via endSession (checkered-flag flow routes home).
+  //  • Racing with a partner → DNF: take the -20, teammate continues solo. The
+  //    auto-exit effect sends me home once the leave is recorded.
+  async function handleLeaveRace() {
     if (!session || !user) return;
+    setShowRetireModal(false);
     if (session.status === 'waiting') {
       await leaveBeforeStart();
+      router.replace('/(app)');
+      return;
     }
-    router.replace('/(app)');
-  }
-
-  // Permanent retire: take the leave penalty now (unless stakes are off),
-  // recorded in leftParticipants. Your teammate can keep racing without you,
-  // and you can still climb back in later as long as the race stays salvageable.
-  async function handlePermanentRetire() {
-    if (!session || !user) return;
-    if (session.status === 'waiting') {
-      await leaveBeforeStart();
-    } else {
-      const { penaltyApplied } = await leaveSession(session.id, user.uid, isHost);
-      if (penaltyApplied) setPointsToast(POINTS_LEAVE_PENALTY);
+    if (racingAlone) {
+      await endSession(session.id);
+      return;
     }
-    router.replace('/(app)');
+    const { penaltyApplied } = await leaveSession(session.id, user.uid, isHost);
+    if (penaltyApplied) setPointsToast(POINTS_LEAVE_PENALTY);
   }
 
   async function handleCopyCode() {
@@ -380,8 +395,7 @@ export default function SessionScreen() {
         stakesOff={stakesOff}
         penaltyPoints={POINTS_LEAVE_PENALTY}
         onStay={() => setShowRetireModal(false)}
-        onNormalRetire={handleNormalRetire}
-        onPermanentRetire={handlePermanentRetire}
+        onLeave={handleLeaveRace}
       />
 
       {/* Overlays */}
