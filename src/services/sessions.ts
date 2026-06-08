@@ -245,6 +245,13 @@ export async function advancePhase(
     'timerState.phaseCount': newPhaseCount,
     'timerState.endsAt': endsAt,
     'timerState.lastUpdatedAt': serverTimestamp(),
+    // A fresh focus lap wipes the slate clean: clear the "focus broken" flags so
+    // a driver who briefly switched away on a previous lap isn't branded
+    // "FOCUS BROKEN" for the rest of the race. The strike COUNT still stands
+    // (3 switches = DNF) — only the per-lap visual resets.
+    ...(nextPhase === 'focus'
+      ? { hostFocusBroken: false, participantFocusBroken: false }
+      : {}),
   });
 }
 
@@ -322,17 +329,21 @@ export async function leaveSession(
  * small penalty; the 3rd switch is an automatic, permanent DNF. The partner is
  * informed through the realtime `*SwitchCount` / `leftParticipants` change.
  * No-ops outside a focus phase, when paused, or in stakes-off practice.
+ *
+ * Takes the live in-memory `session` (the screen already has it from the
+ * subscription) rather than re-reading it. This is deliberate: the strike fires
+ * the instant the app goes to background, and the OS suspends the JS thread
+ * within moments. An awaited Firestore READ in front of the write often never
+ * resolves while backgrounded — so the strike write never dispatched and the
+ * partner never got a snapshot change (no toast, avatar only updated much later
+ * when the leaver returned). Writing straight from memory makes the strike the
+ * first and only network op, so it reliably reaches Firestore and the partner.
  */
 export async function recordAppSwitch(
-  sessionId: string,
+  session: Session,
   uid: string,
   isHost: boolean
 ): Promise<{ count: number; dnf: boolean }> {
-  const sessionRef = doc(db, 'sessions', sessionId);
-  const snap = await getDoc(sessionRef);
-  if (!snap.exists()) return { count: 0, dnf: false };
-
-  const session = { id: snap.id, ...snap.data() } as Session;
   const stakesOff = session.mode === 'solo' && session.stakesEnabled === false;
   if (stakesOff) return { count: 0, dnf: false };
   if (session.status !== 'active' || session.timerState.phase !== 'focus') {
@@ -343,13 +354,14 @@ export async function recordAppSwitch(
     return { count: 0, dnf: false };
   }
 
+  const sessionRef = doc(db, 'sessions', session.id);
   const prevCount = isHost ? (session.hostSwitchCount ?? 0) : (session.participantSwitchCount ?? 0);
   const newCount = prevCount + 1;
   const countField = isHost ? 'hostSwitchCount' : 'participantSwitchCount';
   const brokenField = isHost ? 'hostFocusBroken' : 'participantFocusBroken';
 
-  // Always record the strike + flip the "focus broken" flag (drives the
-  // partner's realtime toast and the sad avatar state).
+  // Record the strike + flip the "focus broken" flag (drives the partner's
+  // realtime toast and the sad avatar state) — single write, no read first.
   await updateDoc(sessionRef, {
     [countField]: increment(1),
     [brokenField]: true,

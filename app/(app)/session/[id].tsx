@@ -4,7 +4,6 @@ import {
   Text,
   StyleSheet,
   BackHandler,
-  Alert,
   TouchableOpacity,
   Image,
 } from 'react-native';
@@ -220,13 +219,13 @@ export default function SessionScreen() {
   // the 3rd is an automatic DNF. Practice mode (stakes off) is exempt. ──────────
   const handleAppSwitch = useCallback(async () => {
     if (!session || !user) return;
-    const { count, dnf } = await recordAppSwitch(session.id, user.uid, isHost);
+    const { count, dnf } = await recordAppSwitch(session, user.uid, isHost);
     if (dnf) {
       setPointsToast(POINTS_LEAVE_PENALTY);      // -20, auto-DNF
     } else if (count > 0) {
       setPointsToast(POINTS_SWITCH_PENALTY);     // -5 strike
     }
-  }, [session?.id, user?.uid, isHost]);
+  }, [session, user?.uid, isHost]);
 
   useAppSwitchPenalty(
     session?.status === 'active' &&
@@ -300,18 +299,6 @@ export default function SessionScreen() {
     if (!session || !amInControl) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     await resumeSession(session.id, displaySeconds);
-  }
-
-  async function handleEnd() {
-    if (!session || !amInControl) return;
-    Alert.alert(
-      'Finish Race?',
-      racingAlone ? 'End your lap and bank your points?' : 'This will end the session for both drivers.',
-      [
-        { text: 'Keep Going', style: 'cancel' },
-        { text: 'Finish', onPress: () => endSession(session.id) },
-      ]
-    );
   }
 
   // A race that hasn't started yet has nothing at stake — just unwind cleanly:
@@ -547,17 +534,13 @@ export default function SessionScreen() {
               {isWaiting && !isSolo && !partnerConnected && (
                 <Button label="WAITING FOR DRIVER..." onPress={() => {}} size="lg" disabled />
               )}
+              {/* One leave/finish action only — the top-right RETIRE. These
+                  controls just drive the race (pause/resume). */}
               {isActive && (
-                <View style={styles.controlRow}>
-                  <Button label="YELLOW FLAG" onPress={handlePause} variant="secondary" size="md" style={styles.halfBtn} />
-                  <Button label={racingAlone ? 'FINISH' : 'RETIRE'} onPress={handleEnd} variant="ghost" size="md" style={styles.halfBtn} />
-                </View>
+                <Button label="YELLOW FLAG" onPress={handlePause} variant="secondary" size="lg" />
               )}
               {isPaused && (
-                <View style={styles.controlRow}>
-                  <Button label="GREEN FLAG" onPress={handleResume} size="md" style={styles.halfBtn} />
-                  <Button label={racingAlone ? 'FINISH' : 'RETIRE'} onPress={handleEnd} variant="ghost" size="md" style={styles.halfBtn} />
-                </View>
+                <Button label="GREEN FLAG" onPress={handleResume} size="lg" />
               )}
             </>
           ) : (

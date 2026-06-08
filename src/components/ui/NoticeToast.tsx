@@ -31,10 +31,10 @@ export function NoticeToast({ message, tone = 'neutral', onDone }: NoticeToastPr
     translateY.value = withSpring(0, { damping: 12 });
     opacity.value = withTiming(1, { duration: 200 });
 
-    opacity.value = withDelay(2200, withTiming(0, { duration: 400 }, (finished) => {
+    opacity.value = withDelay(3500, withTiming(0, { duration: 400 }, (finished) => {
       if (finished) runOnJS(onDone)();
     }));
-    translateY.value = withDelay(2200, withTiming(-40, { duration: 400 }));
+    translateY.value = withDelay(3500, withTiming(-40, { duration: 400 }));
   }, []);
 
   const animStyle = useAnimatedStyle(() => ({
