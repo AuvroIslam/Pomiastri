@@ -12,6 +12,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/hooks/useAuth';
+import * as Clipboard from 'expo-clipboard';
+import * as Haptics from 'expo-haptics';
 import { updateAvatar, updateDisplayName, addPoints } from '@/services/users';
 import { logoutUser } from '@/services/auth';
 import { Button } from '@/components/ui/Button';
@@ -39,6 +41,7 @@ export default function ProfileScreen() {
   const [previewAvatarId, setPreviewAvatarId] = useState<DriverId | null>(null);
   const [showSwitchModal, setShowSwitchModal] = useState(false);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [copied, setCopied] = useState(false);
 
   // Cycle through avatar states on the showcase card
   useEffect(() => {
@@ -98,6 +101,15 @@ export default function ProfileScreen() {
     } finally {
       setSavingAvatar(false);
     }
+  }
+
+  async function handleCopyFriendCode() {
+    const code = profile?.friendCode;
+    if (!code) return;
+    await Clipboard.setStringAsync(code);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1000);
   }
 
   return (
@@ -176,7 +188,12 @@ export default function ProfileScreen() {
           )}
           <View style={styles.codeRow}>
             <Text style={styles.codeLabel}>FRIEND CODE</Text>
-            <Text style={styles.codeValue}>{profile?.friendCode ?? '------'}</Text>
+            <View style={styles.codeInline}>
+              <Text style={styles.codeValue}>{profile?.friendCode ?? '------'}</Text>
+              <TouchableOpacity onPress={handleCopyFriendCode} style={styles.copyBtn}>
+                <Text style={styles.copyIcon}>{copied ? '✅' : '📋'}</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </Card>
 
@@ -271,6 +288,9 @@ const styles = StyleSheet.create({
   codeRow: { alignItems: 'center', gap: 4 },
   codeLabel: { fontSize: FontSize.xs, color: Colors.textMuted, letterSpacing: 2 },
   codeValue: { fontSize: FontSize.xl, fontWeight: FontWeight.black, color: Colors.primary, letterSpacing: 4 },
+  codeInline: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
+  copyBtn: { padding: 6, marginLeft: Spacing.sm },
+  copyIcon: { fontSize: FontSize.lg },
   statsCard: { gap: Spacing.md },
   statsGrid: { flexDirection: 'row', gap: Spacing.sm },
   sectionTitle: { fontSize: FontSize.xs, fontWeight: FontWeight.black, color: Colors.textMuted, letterSpacing: 2, marginBottom: Spacing.sm },

@@ -23,6 +23,8 @@ import { ConfirmModal } from '@/components/session/ConfirmModal';
 import { Colors, Spacing, FontSize, FontWeight, Radius } from '@/constants/theme';
 import { F1Assets } from '@/constants/drivers';
 import { AppLogo } from '@/components/ui/AppLogo';
+import * as Clipboard from 'expo-clipboard';
+import * as Haptics from 'expo-haptics';
 
 import { Session } from '@/types';
 
@@ -61,6 +63,16 @@ export default function HomeScreen() {
 
   function confirmLogout() {
     setShowLogoutModal(true);
+  }
+
+  const [copiedTeam, setCopiedTeam] = useState(false);
+  async function handleCopyTeamCode() {
+    const code = profile?.friendCode;
+    if (!code) return;
+    await Clipboard.setStringAsync(code);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    setCopiedTeam(true);
+    setTimeout(() => setCopiedTeam(false), 1000);
   }
 
 
@@ -122,7 +134,12 @@ export default function HomeScreen() {
           </View>
           <View style={styles.codeStrip}>
             <Text style={styles.codeLabel}>TEAM CODE</Text>
-            <Text style={styles.codeValue}>{profile?.friendCode ?? '------'}</Text>
+            <View style={styles.codeRow}>
+              <Text style={styles.codeValue}>{profile?.friendCode ?? '------'}</Text>
+              <TouchableOpacity onPress={handleCopyTeamCode} style={styles.copyBtn}>
+                <Text style={styles.copyIcon}>{copiedTeam ? '✅' : '📋'}</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </Card>
 
@@ -304,8 +321,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.md,
     paddingVertical: Spacing.sm,
   },
+  codeRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
   codeLabel: { fontSize: FontSize.xs, color: Colors.textMuted, letterSpacing: 1 },
   codeValue: { fontSize: FontSize.lg, fontWeight: FontWeight.black, color: Colors.primary, letterSpacing: 4 },
+  copyBtn: { padding: 6, marginLeft: Spacing.sm },
+  copyIcon: { fontSize: FontSize.md },
   rejoinBanner: {
     flexDirection: 'row',
     alignItems: 'center',

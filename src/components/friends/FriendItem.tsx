@@ -1,5 +1,7 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import * as Clipboard from 'expo-clipboard';
+import * as Haptics from 'expo-haptics';
 import { Colors, FontSize, FontWeight, Spacing, Radius } from '@/constants/theme';
 import { Friend } from '@/types';
 import { AvatarDisplay } from '@/components/avatar/AvatarDisplay';
@@ -11,12 +13,25 @@ interface FriendItemProps {
 }
 
 export function FriendItem({ friend, onInvite, onRemove }: FriendItemProps) {
+  const [copied, setCopied] = useState(false);
+
+  async function handleCopy() {
+    await Clipboard.setStringAsync(friend.friendCode);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1000);
+  }
   return (
     <View style={styles.container}>
       <AvatarDisplay avatarId={friend.avatarId} state="idle" size={44} animate={false} />
       <View style={styles.info}>
         <Text style={styles.name}>{friend.displayName}</Text>
-        <Text style={styles.code}>{friend.friendCode}</Text>
+        <View style={styles.codeRow}>
+          <Text style={styles.code}>{friend.friendCode}</Text>
+          <TouchableOpacity onPress={handleCopy} style={styles.copyBtn}>
+            <Text style={styles.copyIcon}>{copied ? '✅' : '📋'}</Text>
+          </TouchableOpacity>
+        </View>
       </View>
       <View style={styles.actions}>
         {onInvite && (
@@ -67,4 +82,7 @@ const styles = StyleSheet.create({
   },
   removeBtn: { paddingHorizontal: Spacing.sm, paddingVertical: Spacing.xs },
   removeText: { fontSize: FontSize.sm, color: Colors.textMuted },
+  codeRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs, marginTop: 2 },
+  copyBtn: { padding: 4 },
+  copyIcon: { fontSize: FontSize.sm },
 });

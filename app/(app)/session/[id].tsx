@@ -369,10 +369,13 @@ export default function SessionScreen() {
     if (penaltyApplied) setPointsToast(POINTS_LEAVE_PENALTY);
   }
 
-  async function handleCopyCode() {
+  const [copiedJoin, setCopiedJoin] = useState(false);
+  async function handleCopyCodeWithFeedback() {
     if (!session?.joinCode) return;
     await Clipboard.setStringAsync(session.joinCode);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    setCopiedJoin(true);
+    setTimeout(() => setCopiedJoin(false), 1000);
   }
 
   // ─── Loading / not found ──────────────────────────────────────────────────────
@@ -538,10 +541,15 @@ export default function SessionScreen() {
 
         {/* ── Join code (duo, waiting, no partner yet) ── */}
         {isWaiting && !partnerConnected && !isSolo && (
-          <TouchableOpacity style={styles.codeBox} onPress={handleCopyCode} activeOpacity={0.7}>
-            <Text style={styles.codeHint}>YOUR PIT PASS — TAP TO COPY</Text>
-            <Text style={styles.codeValue}>{joinCode}</Text>
-          </TouchableOpacity>
+          <View style={styles.codeBox}>
+            <Text style={styles.codeHint}>YOUR PIT PASS</Text>
+            <View style={styles.codeRow}>
+              <Text style={styles.codeValue}>{joinCode}</Text>
+              <TouchableOpacity onPress={handleCopyCodeWithFeedback} style={styles.copyBtn}>
+                <Text style={styles.copyIcon}>{copiedJoin ? '✅' : '📋'}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
         )}
 
         {/* ── Timer (active / paused) ── */}
@@ -751,6 +759,9 @@ const styles = StyleSheet.create({
     borderColor: Colors.primary,
     gap: 4,
   },
+  codeRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
+  copyBtn: { padding: 6, marginLeft: Spacing.sm },
+  copyIcon: { fontSize: FontSize.xxxl - 8 },
   codeHint: { fontSize: FontSize.xs, color: Colors.textMuted, letterSpacing: 1 },
   codeValue: {
     fontSize: FontSize.xxxl,

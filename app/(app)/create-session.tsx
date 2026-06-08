@@ -4,7 +4,6 @@ import {
   Text,
   StyleSheet,
   ScrollView,
-  Alert,
   BackHandler,
   Image,
   TouchableOpacity,
@@ -95,11 +94,13 @@ export default function CreateSessionScreen() {
     }
   }
 
+  const [copied, setCopied] = useState(false);
   async function handleCopyCode() {
     if (!joinCode) return;
     await Clipboard.setStringAsync(joinCode);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    Alert.alert('Copied!', 'Join code copied to clipboard.');
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1000);
   }
 
   async function handleInviteFriend(friend: Friend) {
@@ -225,8 +226,12 @@ export default function CreateSessionScreen() {
             {/* Join code */}
             <Card elevated style={styles.codeCard}>
               <Text style={styles.codeLabel}>YOUR PIT PASS CODE</Text>
-              <Text style={styles.codeValue}>{joinCode}</Text>
-              <Button label="COPY CODE" onPress={handleCopyCode} variant="secondary" size="sm" />
+              <View style={styles.codeRow}>
+                <Text style={styles.codeValue}>{joinCode}</Text>
+                <TouchableOpacity onPress={handleCopyCode} style={styles.copyBtn}>
+                  <Text style={styles.copyIcon}>{copied ? '✅' : '📋'}</Text>
+                </TouchableOpacity>
+              </View>
             </Card>
 
             {/* Invite friends */}
@@ -330,5 +335,8 @@ const styles = StyleSheet.create({
   codeCard: { alignItems: 'center', gap: Spacing.sm, paddingVertical: Spacing.lg },
   codeLabel: { fontSize: FontSize.xs, color: Colors.textMuted, letterSpacing: 2 },
   codeValue: { fontSize: FontSize.xxxl, fontWeight: FontWeight.black, color: Colors.primary, letterSpacing: 8 },
+  codeRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
+  copyBtn: { padding: 6, marginLeft: Spacing.sm },
+  copyIcon: { fontSize: FontSize.lg },
   invitedBadge: { fontSize: FontSize.xs, color: Colors.success, fontWeight: FontWeight.bold, letterSpacing: 1, paddingLeft: Spacing.md, paddingBottom: Spacing.xs },
 });
