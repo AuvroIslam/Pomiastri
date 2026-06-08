@@ -90,7 +90,7 @@ const styles = StyleSheet.create({
 
   disabled: { opacity: 0.4 },
 
-  label: { fontWeight: FontWeight.bold, letterSpacing: 0.5 },
+  label: { fontWeight: FontWeight.bold, letterSpacing: 0.5, textAlign: 'center' },
   labelSize_sm: { fontSize: FontSize.sm },
   labelSize_md: { fontSize: FontSize.md },
   labelSize_lg: { fontSize: FontSize.lg },

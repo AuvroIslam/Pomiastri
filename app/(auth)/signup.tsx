@@ -112,9 +112,6 @@ export default function SignupScreen() {
           </View>
         ) : (
           <View style={styles.form}>
-            <Text style={styles.avatarHint}>
-              Your driver avatar will represent you in sessions and the leaderboard.
-            </Text>
             <View style={styles.carPreview}>
               <Text style={styles.carPreviewLabel}>
                 {DRIVERS[avatarId].name.toUpperCase()}'S CAR
@@ -123,7 +120,8 @@ export default function SignupScreen() {
                 key={avatarId}
                 avatarId={avatarId}
                 state="car"
-                size={190}
+                size={200}
+                style={styles.carBox}
               />
             </View>
 
@@ -181,9 +179,9 @@ const styles = StyleSheet.create({
   container: {
     flexGrow: 1,
     paddingHorizontal: Spacing.xl,
-    paddingTop: Spacing.xxl,
-    paddingBottom: Spacing.xxl,
-    gap: Spacing.lg,
+    paddingTop: Spacing.xl,
+    paddingBottom: Spacing.lg,
+    gap: Spacing.md,
   },
   header: { alignItems: 'center', gap: Spacing.sm },
   logo: { width: 100, height: 34 },
@@ -208,19 +206,17 @@ const styles = StyleSheet.create({
   stepActive: { backgroundColor: Colors.primary },
   stepLine: { width: 40, height: 2, backgroundColor: Colors.border },
   form: { gap: Spacing.md },
-  avatarHint: {
-    fontSize: FontSize.sm,
-    color: Colors.textSecondary,
-    textAlign: 'center',
-    lineHeight: 20,
-  },
   error: {
     fontSize: FontSize.sm,
     color: Colors.primary,
     textAlign: 'center',
     fontWeight: FontWeight.medium,
   },
-  carPreview: { alignItems: 'center', gap: Spacing.xs, marginBottom: -26 },
+  carPreview: { alignItems: 'center', gap: Spacing.xs },
+  // The car art is wide (2.5:1) but AvatarDisplay's box is square, so most of
+  // its height is empty. Clip the box down to the car's real height to reclaim
+  // that space and keep the whole step on one screen without scrolling.
+  carBox: { height: 116 },
   carPreviewLabel: {
     fontSize: FontSize.xs,
     fontWeight: FontWeight.black,
