@@ -15,6 +15,7 @@ import { logoutUser } from '@/services/auth';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Card } from '@/components/ui/Card';
+import { ConfirmModal } from '@/components/session/ConfirmModal';
 import { AvatarDisplay } from '@/components/avatar/AvatarDisplay';
 import { AvatarSelector } from '@/components/avatar/AvatarSelector';
 import { Colors, Spacing, FontSize, FontWeight, Radius } from '@/constants/theme';
@@ -39,6 +40,7 @@ export default function ProfileScreen() {
   const [savingName, setSavingName] = useState(false);
   const [savingAvatar, setSavingAvatar] = useState(false);
   const [showcaseIndex, setShowcaseIndex] = useState(0);
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Cycle through avatar states on the showcase card
@@ -68,10 +70,7 @@ export default function ProfileScreen() {
   }
 
   function confirmLogout() {
-    Alert.alert('Pit Out?', 'Sign out of your account?', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Sign Out', style: 'destructive', onPress: () => logoutUser() },
-    ]);
+    setShowLogoutModal(true);
   }
 
   async function handleSelectAvatar(id: DriverId) {
@@ -88,7 +87,20 @@ export default function ProfileScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <>
+      {/* Sign Out Modal */}
+      <ConfirmModal
+        visible={showLogoutModal}
+        title="PIT OUT?"
+        message="Sign out of your account?"
+        cancelLabel="Cancel"
+        confirmLabel="Sign Out"
+        confirmVariant="danger"
+        onCancel={() => setShowLogoutModal(false)}
+        onConfirm={() => logoutUser()}
+      />
+
+      <SafeAreaView style={styles.safe}>
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
 
         <View style={styles.headerBar}>
@@ -158,6 +170,7 @@ export default function ProfileScreen() {
         <Button label="PIT OUT (SIGN OUT)" onPress={confirmLogout} variant="danger" size="lg" />
       </ScrollView>
     </SafeAreaView>
+    </>
   );
 }
 

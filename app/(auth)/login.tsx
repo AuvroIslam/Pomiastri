@@ -8,7 +8,6 @@ import {
   Platform,
   TouchableOpacity,
   BackHandler,
-  Alert,
   Image,
   ImageBackground,
 } from 'react-native';
@@ -16,6 +15,7 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import { loginUser } from '@/services/auth';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
+import { ConfirmModal } from '@/components/session/ConfirmModal';
 import { Colors, Spacing, FontSize, FontWeight, Radius } from '@/constants/theme';
 import { AppLogo } from '@/components/ui/AppLogo';
 import { F1Assets } from '@/constants/drivers';
@@ -26,14 +26,12 @@ export default function LoginScreen() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [showExitModal, setShowExitModal] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
       const sub = BackHandler.addEventListener('hardwareBackPress', () => {
-        Alert.alert('Exit App', 'Do you want to exit?', [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Exit', style: 'destructive', onPress: () => BackHandler.exitApp() },
-        ]);
+        setShowExitModal(true);
         return true;
       });
       return () => sub.remove();
@@ -57,7 +55,20 @@ export default function LoginScreen() {
   }
 
   return (
-    <KeyboardAvoidingView
+    <>
+      {/* Exit App Modal */}
+      <ConfirmModal
+        visible={showExitModal}
+        title="LEAVE THE PIT LANE?"
+        message="Are you sure you want to exit the app?"
+        cancelLabel="Cancel"
+        confirmLabel="Exit"
+        confirmVariant="danger"
+        onCancel={() => setShowExitModal(false)}
+        onConfirm={() => BackHandler.exitApp()}
+      />
+
+      <KeyboardAvoidingView
       style={styles.flex}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
@@ -114,6 +125,7 @@ export default function LoginScreen() {
         </TouchableOpacity>
       </ScrollView>
     </KeyboardAvoidingView>
+    </>
   );
 }
 

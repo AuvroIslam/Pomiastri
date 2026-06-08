@@ -6,7 +6,6 @@ import {
   ScrollView,
   TouchableOpacity,
   BackHandler,
-  Alert,
   Image,
 } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
@@ -20,6 +19,7 @@ import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { AvatarDisplay } from '@/components/avatar/AvatarDisplay';
 import { LeaderboardRow } from '@/components/leaderboard/LeaderboardRow';
+import { ConfirmModal } from '@/components/session/ConfirmModal';
 import { Colors, Spacing, FontSize, FontWeight, Radius } from '@/constants/theme';
 import { F1Assets } from '@/constants/drivers';
 import { AppLogo } from '@/components/ui/AppLogo';
@@ -31,6 +31,8 @@ export default function HomeScreen() {
   const router = useRouter();
   const { leaderboard } = useLeaderboard(3);
   const [activeSession, setActiveSession] = useState<Session | null>(null);
+  const [showExitModal, setShowExitModal] = useState(false);
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
 
   useNotifications(user?.uid);
 
@@ -43,10 +45,7 @@ export default function HomeScreen() {
     useCallback(() => {
       if (user) getActiveSessionForUser(user.uid).then(setActiveSession);
       const sub = BackHandler.addEventListener('hardwareBackPress', () => {
-        Alert.alert('Exit App', 'Leave the pit lane?', [
-          { text: 'Stay', style: 'cancel' },
-          { text: 'Exit', style: 'destructive', onPress: () => BackHandler.exitApp() },
-        ]);
+        setShowExitModal(true);
         return true;
       });
       return () => sub.remove();
@@ -64,16 +63,38 @@ export default function HomeScreen() {
   }
 
   function confirmLogout() {
-    Alert.alert('Pit Out?', 'Sign out of your account?', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Sign Out', style: 'destructive', onPress: () => logoutUser() },
-    ]);
+    setShowLogoutModal(true);
   }
 
 
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <>
+      {/* Exit App Modal */}
+      <ConfirmModal
+        visible={showExitModal}
+        title="LEAVE THE PIT LANE?"
+        message="Are you sure you want to exit the app?"
+        cancelLabel="Stay"
+        confirmLabel="Exit"
+        confirmVariant="danger"
+        onCancel={() => setShowExitModal(false)}
+        onConfirm={() => BackHandler.exitApp()}
+      />
+
+      {/* Sign Out Modal */}
+      <ConfirmModal
+        visible={showLogoutModal}
+        title="PIT OUT?"
+        message="Sign out of your account?"
+        cancelLabel="Cancel"
+        confirmLabel="Sign Out"
+        confirmVariant="danger"
+        onCancel={() => setShowLogoutModal(false)}
+        onConfirm={() => logoutUser()}
+      />
+
+      <SafeAreaView style={styles.safe}>
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
 
         <View style={styles.headerBar}>
@@ -187,6 +208,7 @@ export default function HomeScreen() {
         )}
       </ScrollView>
     </SafeAreaView>
+    </>
   );
 }
 
