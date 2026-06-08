@@ -20,12 +20,18 @@ export function useAppSwitchPenalty(active: boolean, onSwitch: () => void) {
       const prev = appStateRef.current;
       appStateRef.current = nextState;
 
+      console.log('[AppSwitch] state change:', prev, '->', nextState, '| active:', active, '| firedRef:', firedRef.current);
+
       if (nextState === 'background' && !firedRef.current) {
         firedRef.current = true;
+        console.log('[AppSwitch] >>> FIRING onSwitch (going to background while active)');
         onSwitchRef.current();
       } else if (nextState === 'active') {
         // Back in the foreground — arm the next strike.
         firedRef.current = false;
+        console.log('[AppSwitch] back to foreground — strike armed again');
+      } else {
+        console.log('[AppSwitch] no-op (inactive/other or already fired)');
       }
     });
 

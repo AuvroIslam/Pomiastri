@@ -362,11 +362,13 @@ export async function recordAppSwitch(
 
   // Record the strike + flip the "focus broken" flag (drives the partner's
   // realtime toast and the sad avatar state) — single write, no read first.
+  console.log('[recordAppSwitch] writing strike to Firestore | session:', session.id, '| uid:', uid, '| isHost:', isHost, '| newCount:', newCount, '| countField:', countField);
   await updateDoc(sessionRef, {
     [countField]: increment(1),
     [brokenField]: true,
     'timerState.lastUpdatedAt': serverTimestamp(),
   });
+  console.log('[recordAppSwitch] strike write done');
 
   if (newCount >= MAX_SWITCHES) {
     // 3rd strike — permanent DNF (the -20 leave penalty stands in for this

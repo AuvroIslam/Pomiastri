@@ -55,6 +55,7 @@ export default function SessionScreen() {
   const prevPhaseCountRef = useRef<number>(0);
   const prevPartnerLeftRef = useRef<boolean | null>(null);
   const prevPartnerSwitchRef = useRef<number | null>(null);
+  const prevSessionIdRef = useRef<string | null>(null);
   const exitedRef = useRef(false);
 
   // Primary check: mode field. Fallback: if no participant slot and we're the
@@ -218,14 +219,24 @@ export default function SessionScreen() {
   // ─── App-switch strikes: every background during a focus phase costs points;
   // the 3rd is an automatic DNF. Practice mode (stakes off) is exempt. ──────────
   const handleAppSwitch = useCallback(async () => {
-    if (!session || !user) return;
-    const { count, dnf } = await recordAppSwitch(session, user.uid, isHost);
-    if (dnf) {
-      setPointsToast(POINTS_LEAVE_PENALTY);      // -20, auto-DNF
-    } else if (count > 0) {
-      setPointsToast(POINTS_SWITCH_PENALTY);     // -5 strike
+    console.log('[handleAppSwitch] called | session:', session?.id, '| user:', user?.uid, '| isHost:', isHost);
+    console.log('[handleAppSwitch] session status:', session?.status, '| phase:', session?.timerState.phase, '| stakesOff:', stakesOff);
+    if (!session || !user) {
+      console.warn('[handleAppSwitch] bailed early — session or user is null');
+      return;
     }
-  }, [session, user?.uid, isHost]);
+    try {
+      const { count, dnf } = await recordAppSwitch(session, user.uid, isHost);
+      console.log('[handleAppSwitch] recordAppSwitch returned — count:', count, '| dnf:', dnf);
+      if (dnf) {
+        setPointsToast(POINTS_LEAVE_PENALTY);      // -20, auto-DNF
+      } else if (count > 0) {
+        setPointsToast(POINTS_SWITCH_PENALTY);     // -5 strike
+      }
+    } catch (err) {
+      console.error('[handleAppSwitch] recordAppSwitch threw:', err);
+    }
+  }, [session, user?.uid, isHost, stakesOff]);
 
   useAppSwitchPenalty(
     session?.status === 'active' &&
@@ -234,13 +245,31 @@ export default function SessionScreen() {
     handleAppSwitch
   );
 
+  // ─── Reset baseline refs when session changes (prevents stale-ref cross-session bugs) ──
+  // Declared BEFORE the two toast effects so it runs first in the same commit.
+  // Without this, refs from session A carry into session B: if partner switched
+  // once in session A (ref=1) and switches once in session B (count=1 again),
+  // was===count → no toast. Same issue causes a false "IS BACK" toast on
+  // leftParticipants reset between sessions.
+  useEffect(() => {
+    if (!session) return;
+    if (session.id !== prevSessionIdRef.current) {
+      console.log('[SessionReset] new session id:', session.id, '— resetting partner baseline refs');
+      prevSessionIdRef.current = session.id;
+      prevPartnerLeftRef.current = null;
+      prevPartnerSwitchRef.current = null;
+    }
+  }, [session?.id]);
+
   // ─── Feedback when your teammate leaves or comes back ───────────────────────
   // Skip the very first observation (it's just establishing a baseline on
   // mount/load) — only react to actual transitions from here on.
   useEffect(() => {
+    console.log('[PartnerLeft effect] partnerHasLeft:', partnerHasLeft, '| was:', prevPartnerLeftRef.current, '| isSolo:', isSolo, '| partnerName:', partnerName);
     if (!session || isSolo) { prevPartnerLeftRef.current = partnerHasLeft; return; }
     const was = prevPartnerLeftRef.current;
     if (was !== null && was !== partnerHasLeft) {
+      console.log('[PartnerLeft effect] >>> TRANSITION detected — showing toast. partnerHasLeft now:', partnerHasLeft);
       if (partnerHasLeft) {
         setSessionNotice({ message: `${partnerName ?? 'Your teammate'} LEFT THE RACE — you can finish solo`, tone: 'warning' });
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
@@ -248,6 +277,8 @@ export default function SessionScreen() {
         setSessionNotice({ message: `${partnerName ?? 'Your teammate'} IS BACK ON TRACK!`, tone: 'success' });
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }
+    } else {
+      console.log('[PartnerLeft effect] no transition (was === partnerHasLeft or was is null), skipping toast');
     }
     prevPartnerLeftRef.current = partnerHasLeft;
   }, [session?.id, partnerHasLeft, isSolo, partnerName]);
@@ -255,16 +286,20 @@ export default function SessionScreen() {
   // ─── Feedback when your teammate switches away (app-switch strike) ───────────
   // Watches the partner's switch counter; each increment is a fresh strike.
   useEffect(() => {
+    console.log('[PartnerSwitch effect] partnerSwitchCount:', partnerSwitchCount, '| was:', prevPartnerSwitchRef.current, '| isSolo:', isSolo, '| MAX_SWITCHES:', MAX_SWITCHES);
     if (!session || isSolo) { prevPartnerSwitchRef.current = partnerSwitchCount; return; }
     const was = prevPartnerSwitchRef.current;
     // The 3rd strike is a DNF — let the "LEFT THE RACE" toast carry that one so
     // the two don't clobber each other. Only warn on the non-fatal strikes.
     if (was !== null && partnerSwitchCount > was && partnerSwitchCount < MAX_SWITCHES) {
+      console.log('[PartnerSwitch effect] >>> showing SWITCHED AWAY toast, strike', partnerSwitchCount);
       setSessionNotice({
         message: `${partnerName ?? 'Your teammate'} SWITCHED AWAY — STRIKE ${partnerSwitchCount}/${MAX_SWITCHES}`,
         tone: 'warning',
       });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+    } else {
+      console.log('[PartnerSwitch effect] no toast — was:', was, '| count:', partnerSwitchCount, '(no increase, or >= MAX_SWITCHES, or was null)');
     }
     prevPartnerSwitchRef.current = partnerSwitchCount;
   }, [session?.id, partnerSwitchCount, isSolo, partnerName]);
