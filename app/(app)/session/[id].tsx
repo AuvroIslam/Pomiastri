@@ -56,6 +56,10 @@ export default function SessionScreen() {
   const prevPartnerSwitchRef = useRef<number | null>(null);
   const prevSessionIdRef = useRef<string | null>(null);
   const exitedRef = useRef(false);
+  // Tracks whether the 'go' green-light animation has already finished so the
+  // light-stage effect never restarts it when a slow Firestore response arrives
+  // after onGoComplete has already fired.
+  const goCompleteRef = useRef(false);
 
   // Primary check: mode field. Fallback: if no participant slot and we're the
   // only one here (mode was not saved on very old sessions), treat as solo.
@@ -147,7 +151,8 @@ export default function SessionScreen() {
       // Solo: animate lights 0→4 just like duo (gives user time to see them build up)
       setLightStage(isSolo ? 'building' : session.participantId ? 'building' : 'empty');
     } else if (prev === 'waiting' && (curr === 'active' || curr === 'solo')) {
-      setLightStage('go');
+      // Don't restart the animation if onGoComplete already fired (slow network).
+      if (!goCompleteRef.current) setLightStage('go');
     } else if (curr === 'active' || curr === 'solo' || curr === 'paused') {
       setLightStage('racing');
     }
@@ -317,15 +322,14 @@ export default function SessionScreen() {
   }, [session?.id, user?.uid, iHaveLeft]);
 
   // ─── Controls ────────────────────────────────────────────────────────────────
-  async function handleStart() {
+  function handleStart() {
     if (!session || !amInControl) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
     setLightStage('go');
-    const sessionId = session.id;
-    const settings = session.settings;
-    // Delay startSession so the green light (1200ms hold) can show fully
-    // before Firestore status change causes a re-render
-    setTimeout(() => startSession(sessionId, settings), 1400);
+    // Fire immediately — no artificial delay. The layout reflow (timer, points,
+    // controls appearing when status → 'active') is suppressed by showActiveUI
+    // so it only becomes visible once the lights animation finishes.
+    startSession(session.id, session.settings);
   }
 
   async function handlePause() {
@@ -430,6 +434,11 @@ export default function SessionScreen() {
   const isWaiting = status === 'waiting';
   const myState = getMyState();
   const partnerState = getPartnerState();
+  // Suppress the active-UI sections (timer, points, controls, avatars resize)
+  // while the green-light animation is running so the layout doesn't reflow
+  // mid-animation. Everything reveals cleanly when the lights fade out.
+  const inStartAnimation = lightStage === 'go';
+  const showActiveUI = (isActive || isPaused) && !inStartAnimation;
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -467,7 +476,7 @@ export default function SessionScreen() {
         {/* ── Top bar ── */}
         <View style={styles.topBar}>
           <AppLogo size={40} />
-          {(isActive || isPaused) && <PhaseIndicator phaseCount={timerState.phaseCount} />}
+          {showActiveUI && <PhaseIndicator phaseCount={timerState.phaseCount} />}
           <TouchableOpacity onPress={() => setShowRetireModal(true)} style={styles.retireBtn}>
             <Text style={styles.retireText}>RETIRE</Text>
           </TouchableOpacity>
@@ -479,7 +488,7 @@ export default function SessionScreen() {
           <View style={styles.lightsWrapper}>
             <GridStartLights
               stage={lightStage}
-              onGoComplete={() => setLightStage('racing')}
+              onGoComplete={() => { goCompleteRef.current = true; setLightStage('racing'); }}
             />
             <Text style={styles.lightsStatus}>
               {isSolo
@@ -492,7 +501,7 @@ export default function SessionScreen() {
         )}
 
         {/* ── Points strip (active/paused) ── */}
-        {(isActive || isPaused) && (
+        {showActiveUI && (
           <View style={styles.pointsStrip}>
             <Text style={styles.pointsStripText}>
               {stakesOff
@@ -511,7 +520,7 @@ export default function SessionScreen() {
             <AvatarDisplay
               avatarId={profile?.avatarId}
               state={myState}
-              size={isWaiting ? 120 : 80}
+              size={(isWaiting || inStartAnimation) ? 120 : 80}
               animate
             />
             <Text style={styles.driverLabel}>{profile?.displayName?.toUpperCase() ?? 'YOU'}</Text>
@@ -524,7 +533,7 @@ export default function SessionScreen() {
             <View style={styles.driversRow}>
               {/* My driver */}
               <View style={styles.driverCard}>
-                <AvatarDisplay avatarId={profile?.avatarId} state={myState} size={isWaiting ? 90 : 72} animate />
+                <AvatarDisplay avatarId={profile?.avatarId} state={myState} size={(isWaiting || inStartAnimation) ? 90 : 72} animate />
                 <Text style={styles.driverLabel}>YOU</Text>
                 <Text style={[styles.driverStatus, { color: myStateColor(myState) }]}>
                   {myStateLabel(myState, iHaveLeft)}
@@ -533,7 +542,7 @@ export default function SessionScreen() {
 
               {/* Teammate divider — partnership, not rivalry */}
               <View style={styles.vsDivider}>
-                {isActive ? (
+                {showActiveUI ? (
                   <Image source={F1Assets.checkedFlag} style={styles.vsFlag} resizeMode="contain" />
                 ) : null}
                 <Text style={styles.vsText}>&amp;</Text>
@@ -542,9 +551,9 @@ export default function SessionScreen() {
               {/* Teammate */}
               <View style={styles.driverCard}>
                 {partnerConnected ? (
-                  <AvatarDisplay avatarId={partnerAvatarId} state={partnerState} size={isWaiting ? 90 : 72} animate />
+                  <AvatarDisplay avatarId={partnerAvatarId} state={partnerState} size={(isWaiting || inStartAnimation) ? 90 : 72} animate />
                 ) : (
-                  <View style={[styles.emptySlot, { width: isWaiting ? 90 : 72, height: isWaiting ? 90 : 72 }]}>
+                  <View style={[styles.emptySlot, { width: (isWaiting || inStartAnimation) ? 90 : 72, height: (isWaiting || inStartAnimation) ? 90 : 72 }]}>
                     <Text style={styles.emptySlotText}>?</Text>
                   </View>
                 )}
@@ -554,7 +563,7 @@ export default function SessionScreen() {
                 </Text>
               </View>
             </View>
-            {(isActive || isPaused) && (
+            {showActiveUI && (
               <Text style={styles.teammateCaption}>RACING TOGETHER</Text>
             )}
           </>
@@ -574,7 +583,7 @@ export default function SessionScreen() {
         )}
 
         {/* ── Timer (active / paused) ── */}
-        {(isActive || isPaused) && (
+        {showActiveUI && (
           <View style={styles.timerWrapper}>
             <TimerDisplay
               seconds={displaySeconds}
@@ -600,10 +609,10 @@ export default function SessionScreen() {
               )}
               {/* One leave/finish action only — the top-right RETIRE. These
                   controls just drive the race (pause/resume). */}
-              {isActive && (
+              {showActiveUI && isActive && (
                 <Button label="YELLOW FLAG" onPress={handlePause} variant="secondary" size="lg" />
               )}
-              {isPaused && (
+              {showActiveUI && isPaused && (
                 <Button label="GREEN FLAG" onPress={handleResume} size="lg" />
               )}
             </>
