@@ -36,7 +36,6 @@ import { Colors, Spacing, FontSize, FontWeight, Radius } from '@/constants/theme
 import { F1Assets, DriverState } from '@/constants/drivers';
 import { AppLogo } from '@/components/ui/AppLogo';
 import { getNextPhase, getPhaseDuration, PHASE_LABELS } from '@/constants/pomodoro';
-import { PomodoroPhase } from '@/types';
 
 export default function SessionScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -124,6 +123,20 @@ export default function SessionScreen() {
     return 'focus';
   }
 
+  // ─── Session complete / cancelled routing ────────────────────────────────────
+  // MUST be declared before the light-stage effect: both depend on session?.status,
+  // so React runs them in declaration order. The light-stage effect writes
+  // prevStatusRef.current = curr at the end of its body — if this routing effect
+  // ran second it would always see prevStatusRef === 'completed' and never fire.
+  useEffect(() => {
+    if (!session || !user) return;
+    if (session.status === 'completed' && prevStatusRef.current !== 'completed') {
+      setShowCheckeredFlag(true);
+    } else if (session.status === 'cancelled') {
+      router.replace('/(app)');
+    }
+  }, [session?.status]);
+
   // ─── Start lights stage driven by session state ──────────────────────────────
   useEffect(() => {
     if (!session) return;
@@ -149,16 +162,6 @@ export default function SessionScreen() {
       setLightStage('building');
     }
   }, [session?.participantId]);
-
-  // ─── Session complete / cancelled routing ────────────────────────────────────
-  useEffect(() => {
-    if (!session || !user) return;
-    if (session.status === 'completed' && prevStatusRef.current !== 'completed') {
-      setShowCheckeredFlag(true);
-    } else if (session.status === 'cancelled') {
-      router.replace('/(app)');
-    }
-  }, [session?.status]);
 
   // ─── Haptic + toast for BOTH users when a focus phase completes ──────────────
   useEffect(() => {
@@ -349,8 +352,10 @@ export default function SessionScreen() {
 
   // Single leave action. Leaving is permanent now (DNF):
   //  • Not started yet → just unwind cleanly, no penalty.
-  //  • Only driver left (solo / partner already gone) → "leaving" == finishing,
-  //    so bank the lap via endSession (checkered-flag flow routes home).
+  //  • Pure solo → retirement, not completion: cancel the session (avoids the
+  //    "RACE COMPLETE" flag), save whatever the driver earned, go home directly.
+  //  • Duo-gone-solo (partner already left) → last driver leaving counts as
+  //    finishing, so use endSession (checkered-flag flow rewards the full run).
   //  • Racing with a partner → DNF: take the -20, teammate continues solo. The
   //    auto-exit effect sends me home once the leave is recorded.
   async function handleLeaveRace() {
@@ -362,6 +367,22 @@ export default function SessionScreen() {
       return;
     }
     if (racingAlone) {
+      if (isSolo) {
+        // Save partial history first (session still 'active' in closure — wasCompleted = false).
+        await saveSessionHistory(session, user.uid, sessionPhasePoints);
+        if (session.timerState.phaseCount > 0) {
+          const focusMin = Math.round(
+            (session.timerState.phaseCount * session.settings.focusDuration) / 60
+          );
+          await recordSessionCompletion(user.uid, focusMin, sessionPhasePoints);
+        }
+        // Cancel (not complete) so the session leaves the active-query results
+        // and the home screen doesn't show a lingering "session in progress" banner.
+        await cancelSession(session.id);
+        router.replace('/(app)');
+        return;
+      }
+      // Duo-gone-solo: the last driver chose to finish — reward the full run.
       await endSession(session.id);
       return;
     }
