@@ -35,8 +35,8 @@ export function AvatarDisplay({
   useEffect(() => {
     if (!animate) return;
     scale.value = withSequence(
-      withTiming(1.1, { duration: 120 }),
-      withSpring(1, { damping: 8 })
+      withTiming(1.08, { duration: 80 }),
+      withSpring(1, { damping: 18, stiffness: 180 })
     );
   }, [state, animate]);
 
