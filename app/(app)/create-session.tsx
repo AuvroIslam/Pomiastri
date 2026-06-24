@@ -28,6 +28,8 @@ import { Friend, SessionMode } from '@/types';
 const FOCUS_OPTIONS = [15, 25, 30, 45, 50, 60];
 const BREAK_OPTIONS = [5, 10, 15];
 const LONG_BREAK_OPTIONS = [10, 15, 20, 30];
+const LAPS_OPTIONS = [2, 3, 4, 5, 6, 8];
+const CYCLES_OPTIONS = [1, 2, 3, 4, 5, 6];
 
 export default function CreateSessionScreen() {
   const router = useRouter();
@@ -37,6 +39,8 @@ export default function CreateSessionScreen() {
   const [focusMin, setFocusMin] = useState(25);
   const [shortBreakMin, setShortBreakMin] = useState(5);
   const [longBreakMin, setLongBreakMin] = useState(15);
+  const [lapsPerCycle, setLapsPerCycle] = useState(4);
+  const [totalCycles, setTotalCycles] = useState(2);
   const [stakesEnabled, setStakesEnabled] = useState(true);
   const [loading, setLoading] = useState(false);
   const [createdSessionId, setCreatedSessionId] = useState<string | null>(null);
@@ -71,6 +75,8 @@ export default function CreateSessionScreen() {
         focusDuration: focusMin * 60,
         shortBreakDuration: shortBreakMin * 60,
         longBreakDuration: longBreakMin * 60,
+        lapsPerCycle,
+        totalCycles,
       };
       const result = await createSession(
         user.uid,
@@ -204,6 +210,22 @@ export default function CreateSessionScreen() {
                 value={longBreakMin}
                 onChange={setLongBreakMin}
               />
+              <View style={styles.divider} />
+              <SettingPicker
+                label="Laps / Cycle"
+                options={LAPS_OPTIONS}
+                value={lapsPerCycle}
+                onChange={setLapsPerCycle}
+                unit="laps"
+              />
+              <View style={styles.divider} />
+              <SettingPicker
+                label="Cycles"
+                options={CYCLES_OPTIONS}
+                value={totalCycles}
+                onChange={setTotalCycles}
+                unit="cycles"
+              />
             </Card>
 
             <Card style={styles.infoCard}>
@@ -268,11 +290,13 @@ function SettingPicker({
   options,
   value,
   onChange,
+  unit = 'min',
 }: {
   label: string;
   options: number[];
   value: number;
   onChange: (v: number) => void;
+  unit?: string;
 }) {
   const idx = options.indexOf(value);
   const prev = () => onChange(options[Math.max(0, idx - 1)]);
@@ -285,7 +309,7 @@ function SettingPicker({
         <TouchableOpacity onPress={prev} style={settingStyles.arrow} disabled={idx === 0}>
           <Text style={[settingStyles.arrowText, idx === 0 && settingStyles.arrowDisabled]}>‹</Text>
         </TouchableOpacity>
-        <Text style={settingStyles.value}>{value} min</Text>
+        <Text style={settingStyles.value}>{value} {unit}</Text>
         <TouchableOpacity onPress={next} style={settingStyles.arrow} disabled={idx === options.length - 1}>
           <Text style={[settingStyles.arrowText, idx === options.length - 1 && settingStyles.arrowDisabled]}>›</Text>
         </TouchableOpacity>

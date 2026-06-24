@@ -4,6 +4,8 @@ export const DEFAULT_SESSION_SETTINGS: SessionSettings = {
   focusDuration: 25 * 60,
   shortBreakDuration: 5 * 60,
   longBreakDuration: 15 * 60,
+  lapsPerCycle: 4,
+  totalCycles: 2,
 };
 
 export const LONG_BREAK_INTERVAL = 4;
@@ -23,10 +25,11 @@ export const PHASE_LABEL_SHORT: Record<PomodoroPhase, string> = {
 
 export function getNextPhase(
   currentPhase: PomodoroPhase,
-  phaseCount: number
+  phaseCount: number,
+  lapsPerCycle: number = LONG_BREAK_INTERVAL
 ): PomodoroPhase {
   if (currentPhase === 'focus') {
-    const isLongBreak = phaseCount % LONG_BREAK_INTERVAL === 0;
+    const isLongBreak = phaseCount % lapsPerCycle === 0;
     return isLongBreak ? 'longBreak' : 'shortBreak';
   }
   return 'focus';

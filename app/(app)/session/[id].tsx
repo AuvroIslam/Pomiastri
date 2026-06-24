@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   Image,
 } from 'react-native';
+import { createAudioPlayer } from 'expo-audio';
 import { RetireModal } from '@/components/session/RetireModal';
 import * as Clipboard from 'expo-clipboard';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -23,7 +24,7 @@ import {
   POINTS_FULL_COMPLETE, POINTS_PARTNER_LEFT_BONUS,
   POINTS_SOLO_BONUS, POINTS_LEAVE_PENALTY, POINTS_SWITCH_PENALTY, MAX_SWITCHES,
 } from '@/services/sessions';
-import { recordSessionCompletion } from '@/services/users';
+import { recordSessionCompletion, addPoints } from '@/services/users';
 import { TimerDisplay } from '@/components/ui/TimerDisplay';
 import { Button } from '@/components/ui/Button';
 import { PhaseIndicator } from '@/components/session/PhaseIndicator';
@@ -168,6 +169,23 @@ export default function SessionScreen() {
     }
   }, [session?.participantId]);
 
+  // Play while red lights animate; stop when they go out.
+  // Fresh player each time to avoid stuck-promise state from previous sessions.
+  useEffect(() => {
+    if (lightStage !== 'building') return;
+    const player = createAudioPlayer(require('../../../assets/sfx/startingLightSound.mp3'));
+    let cancelled = false;
+    const sub = player.addListener('playbackStatusUpdate', (s) => {
+      if (s.isLoaded && !cancelled) { sub.remove(); try { player.play(); } catch {} }
+    });
+    if (player.isLoaded && !cancelled) { sub.remove(); try { player.play(); } catch {} }
+    return () => {
+      cancelled = true;
+      sub.remove();
+      try { player.pause(); player.remove(); } catch {}
+    };
+  }, [lightStage]);
+
   // ─── Haptic + toast for BOTH users when a focus phase completes ──────────────
   useEffect(() => {
     if (!session) return;
@@ -197,8 +215,18 @@ export default function SessionScreen() {
     phaseAdvancedRef.current = true;
 
     const { timerState, settings } = session;
+    const lapsPerCycle = settings.lapsPerCycle ?? 4;
     const newCount = timerState.phase === 'focus' ? timerState.phaseCount + 1 : timerState.phaseCount;
-    const nextPhase = getNextPhase(timerState.phase, newCount);
+
+    if (timerState.phase === 'focus' && settings.totalCycles != null) {
+      const totalLaps = settings.totalCycles * lapsPerCycle;
+      if (newCount >= totalLaps) {
+        endSession(session.id);
+        return;
+      }
+    }
+
+    const nextPhase = getNextPhase(timerState.phase, newCount, lapsPerCycle);
     advancePhase(session.id, nextPhase, getPhaseDuration(nextPhase, settings), newCount);
   }, [displaySeconds, session?.status, session?.timerState.phase, amTimerDriver]);
 
@@ -372,6 +400,11 @@ export default function SessionScreen() {
     }
     if (racingAlone) {
       if (isSolo) {
+        // Apply leave penalty when race mode (stakes on) and the user bails early.
+        if (!stakesOff) {
+          await addPoints(user.uid, POINTS_LEAVE_PENALTY);
+          setPointsToast(POINTS_LEAVE_PENALTY);
+        }
         // Save partial history first (session still 'active' in closure — wasCompleted = false).
         await saveSessionHistory(session, user.uid, sessionPhasePoints);
         if (session.timerState.phaseCount > 0) {
@@ -476,7 +509,13 @@ export default function SessionScreen() {
         {/* ── Top bar ── */}
         <View style={styles.topBar}>
           <AppLogo size={40} />
-          {showActiveUI && <PhaseIndicator phaseCount={timerState.phaseCount} />}
+          {showActiveUI && (
+            <PhaseIndicator
+              phaseCount={timerState.phaseCount}
+              lapsPerCycle={session.settings.lapsPerCycle ?? 4}
+              totalCycles={session.settings.totalCycles ?? 1}
+            />
+          )}
           <TouchableOpacity onPress={() => setShowRetireModal(true)} style={styles.retireBtn}>
             <Text style={styles.retireText}>RETIRE</Text>
           </TouchableOpacity>

@@ -1,29 +1,26 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import { Colors, FontSize, FontWeight, Spacing, Radius } from '@/constants/theme';
-import { LONG_BREAK_INTERVAL } from '@/constants/pomodoro';
+import { Colors, FontSize, FontWeight, Spacing } from '@/constants/theme';
 
 interface PhaseIndicatorProps {
   phaseCount: number;
+  lapsPerCycle: number;
+  totalCycles: number;
 }
 
-export function PhaseIndicator({ phaseCount }: PhaseIndicatorProps) {
+export function PhaseIndicator({ phaseCount, lapsPerCycle, totalCycles }: PhaseIndicatorProps) {
+  const lapInCycle = phaseCount % lapsPerCycle;
+  const currentCycle = Math.min(Math.floor(phaseCount / lapsPerCycle) + 1, totalCycles);
+
+  const isDotFilled = (i: number) =>
+    i < lapInCycle || (phaseCount > 0 && lapInCycle === 0 && i < lapsPerCycle);
+
   return (
     <View style={styles.container}>
-      {Array.from({ length: LONG_BREAK_INTERVAL }).map((_, i) => (
-        <View
-          key={i}
-          style={[
-            styles.dot,
-            i < phaseCount % LONG_BREAK_INTERVAL || (phaseCount > 0 && phaseCount % LONG_BREAK_INTERVAL === 0 && i < LONG_BREAK_INTERVAL)
-              ? styles.dotFilled
-              : styles.dotEmpty,
-          ]}
-        />
+      {Array.from({ length: lapsPerCycle }).map((_, i) => (
+        <View key={i} style={[styles.dot, isDotFilled(i) ? styles.dotFilled : styles.dotEmpty]} />
       ))}
-      <Text style={styles.label}>
-        {phaseCount} {phaseCount === 1 ? 'lap' : 'laps'}
-      </Text>
+      <Text style={styles.label}>C{currentCycle}/{totalCycles}</Text>
     </View>
   );
 }
@@ -44,6 +41,8 @@ const styles = StyleSheet.create({
   label: {
     fontSize: FontSize.xs,
     color: Colors.textMuted,
+    fontWeight: FontWeight.black,
     marginLeft: Spacing.xs,
+    letterSpacing: 1,
   },
 });

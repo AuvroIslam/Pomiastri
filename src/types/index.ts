@@ -95,6 +95,8 @@ export interface SessionSettings {
   focusDuration: number;
   shortBreakDuration: number;
   longBreakDuration: number;
+  lapsPerCycle: number;
+  totalCycles: number;
 }
 
 export type SessionMode = 'duo' | 'solo';

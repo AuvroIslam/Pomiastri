@@ -3,7 +3,7 @@ import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { View, StyleSheet, Animated, Easing } from 'react-native';
 import * as SplashScreen from 'expo-splash-screen';
-import { useAudioPlayer } from 'expo-audio';
+import { useAudioPlayer, setAudioModeAsync } from 'expo-audio';
 import { AuthProvider, useAuth } from '@/context/AuthContext';
 import { Colors, Spacing, Radius } from '@/constants/theme';
 import { SplashAnimation } from '@/components/ui/SplashAnimation';
@@ -55,6 +55,16 @@ function RootNavigator() {
   const logoTriggeredRef = useRef(false);
 
   const enginePlayer = useAudioPlayer(engineSound);
+
+  useEffect(() => {
+    setAudioModeAsync({
+      playsInSilentMode: true,
+      interruptionMode: 'mixWithOthers',
+      allowsRecording: false,
+      shouldPlayInBackground: false,
+      shouldRouteThroughEarpiece: false,
+    }).catch(() => {});
+  }, []);
 
   // Rev the engine when the splash appears (once)
   useEffect(() => {
