@@ -51,6 +51,7 @@ export default function SessionScreen() {
   const [showRetireModal, setShowRetireModal] = useState(false);
   const [pointsToast, setPointsToast] = useState<number | null>(null);
   const [sessionNotice, setSessionNotice] = useState<{ message: string; tone: 'neutral' | 'warning' | 'success' } | null>(null);
+  const [isMuted, setIsMuted] = useState(false);
   const prevStatusRef = useRef<string | null>(null);
   const prevPhaseCountRef = useRef<number>(0);
   const prevPartnerLeftRef = useRef<boolean | null>(null);
@@ -61,6 +62,7 @@ export default function SessionScreen() {
   // light-stage effect never restarts it when a slow Firestore response arrives
   // after onGoComplete has already fired.
   const goCompleteRef = useRef(false);
+  const musicRef = useRef<ReturnType<typeof createAudioPlayer> | null>(null);
 
   // Primary check: mode field. Fallback: if no participant slot and we're the
   // only one here (mode was not saved on very old sessions), treat as solo.
@@ -185,6 +187,36 @@ export default function SessionScreen() {
       try { player.pause(); player.remove(); } catch {}
     };
   }, [lightStage]);
+
+  // ─── Background race music ───────────────────────────────────────────────────
+  // Create once on mount, destroy on unmount.
+  useEffect(() => {
+    const player = createAudioPlayer(require('../../../assets/sfx/F1PomodoroNoise.mp3'));
+    player.loop = true;
+    musicRef.current = player;
+    return () => {
+      musicRef.current = null;
+      try { player.pause(); player.remove(); } catch {}
+    };
+  }, []);
+
+  // Play during race lap (focus + timer running), pause during pit stop / safety car.
+  useEffect(() => {
+    const player = musicRef.current;
+    if (!player) return;
+    const shouldPlay =
+      !isMuted &&
+      lightStage === 'racing' &&
+      session?.timerState.phase === 'focus' &&
+      session?.timerState.isRunning === true;
+    try {
+      if (shouldPlay) {
+        player.play();
+      } else {
+        player.pause();
+      }
+    } catch {}
+  }, [isMuted, lightStage, session?.timerState.phase, session?.timerState.isRunning]);
 
   // ─── Haptic + toast for BOTH users when a focus phase completes ──────────────
   useEffect(() => {
@@ -516,9 +548,16 @@ export default function SessionScreen() {
               totalCycles={session.settings.totalCycles ?? 1}
             />
           )}
-          <TouchableOpacity onPress={() => setShowRetireModal(true)} style={styles.retireBtn}>
-            <Text style={styles.retireText}>RETIRE</Text>
-          </TouchableOpacity>
+          <View style={styles.topBarRight}>
+            {showActiveUI && (
+              <TouchableOpacity onPress={() => setIsMuted(m => !m)} style={styles.muteBtn}>
+                <Text style={styles.muteIcon}>{isMuted ? '🔇' : '🔊'}</Text>
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity onPress={() => setShowRetireModal(true)} style={styles.retireBtn}>
+              <Text style={styles.retireText}>RETIRE</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* ── Start Lights: show during waiting AND during 'go' flash so green
@@ -723,6 +762,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   f1Logo: { width: 60, height: 22 },
+  topBarRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+  },
+  muteBtn: {
+    paddingHorizontal: Spacing.xs,
+    paddingVertical: 4,
+  },
+  muteIcon: {
+    fontSize: 18,
+  },
   retireBtn: {
     borderWidth: 1,
     borderColor: Colors.primary,
